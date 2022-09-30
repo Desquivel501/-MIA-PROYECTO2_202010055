@@ -1,0 +1,3 @@
+module MIA_PROYECTO2_202010055
+
+go 1.18
