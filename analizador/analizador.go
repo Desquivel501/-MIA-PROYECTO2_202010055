@@ -5,16 +5,16 @@ import (
     "fmt"
 	"strings"
 	"strconv"
+	
 )
 
 type analizador struct {  
     codigo   string
 	cmd comandos.Comandos
-	// numero int
 }
 
 func New(codigo string) analizador{
-	cmd := comandos.Comandos {0}
+	var cmd comandos.Comandos 
 	a := analizador {codigo, cmd}
 	return a
 }
@@ -51,9 +51,10 @@ func Split_txt(texto string) []string{
 	return splited
 }
 
-
 func (a *analizador) Analizar(texto string){
 	
+	texto = strings.Replace(texto, "\n", "", 1)
+
 	cmd_list := Split_txt(texto)
 	var parametros []string
 	comando := ""
@@ -107,6 +108,29 @@ func (a *analizador) Identificar(comando string, parametros []string){
 				fmt.Println("Path: ",path)
 			}
 		}
+
+		if path == ""{
+			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			return
+		}
+
+		if (fit != "FF") && (fit != "BF") && (fit != "WF"){
+			fmt.Println(fit)
+			fmt.Println("[MIA]@Proyecto2:~$ Fit incorrecto")
+			return
+		}
+
+		if (unit != "M") && (unit != "K"){
+			fmt.Println("[MIA]@Proyecto2:~$ Dimensional incorrecto")
+			return
+		}
+
+		if (size <= 0){
+			fmt.Println("[MIA]@Proyecto2:~$ Tamaño del disco incorrecto")
+			return
+		}
+
+		a.cmd.Mkdisk(size, fit[1], unit[0], path)
 	}
 
 	if comando == "rmdisk"{
@@ -140,6 +164,8 @@ func (a *analizador) Identificar(comando string, parametros []string){
 				param = strings.Replace(param, "-size=", "", 1)
 				if s, err := strconv.Atoi(param); err == nil {
 					size = s
+				}else{
+					fmt.Println(err)
 				}
 				fmt.Println("Size: ",size)
 			}
@@ -177,5 +203,28 @@ func (a *analizador) Identificar(comando string, parametros []string){
 				fmt.Println("type: ",type_)
 			}
 		}
+		
+		if path == ""{
+			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			return
+		}
+
+		if (fit != "FF") && (fit != "BF") && (fit != "WF"){
+			fmt.Println(fit)
+			fmt.Println("[MIA]@Proyecto2:~$ Fit incorrecto")
+			return
+		}
+
+		if (unit != "M") && (unit != "K"){
+			fmt.Println("[MIA]@Proyecto2:~$ Dimensional incorrecto")
+			return
+		}
+
+		if (size <= 0){
+			fmt.Println("[MIA]@Proyecto2:~$ Tamaño de la particion incorrecta incorrecto")
+			return
+		}
+		
+		a.cmd.Fdisk(size, fit[1], unit[0], path, type_[0],name)
 	}
 }
