@@ -15,6 +15,7 @@ type analizador struct {
 
 func New(codigo string) analizador{
 	var cmd comandos.Comandos 
+	cmd.Id_disco = 1
 	a := analizador {codigo, cmd}
 	return a
 }
@@ -209,8 +210,12 @@ func (a *analizador) Identificar(comando string, parametros []string){
 			return
 		}
 
+		if name == ""{
+			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de la particion")
+			return
+		}
+
 		if (fit != "FF") && (fit != "BF") && (fit != "WF"){
-			fmt.Println(fit)
 			fmt.Println("[MIA]@Proyecto2:~$ Fit incorrecto")
 			return
 		}
@@ -227,4 +232,49 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		
 		a.cmd.Fdisk(size, fit[1], unit[0], path, type_[0],name)
 	}
+
+	if comando == "mount"{
+		fmt.Println("Comando rmdisk")
+		path := ""
+		name := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-path=") == 0) {
+				param = strings.Replace(param, "-path=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				path = param
+				fmt.Println("Path: ",path)
+			}
+
+			if (strings.Index(param, "-name=") == 0) {
+				param = strings.Replace(param, "-name=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				name = param
+				fmt.Println("Name: ",name)
+			}
+		}
+
+		if path == ""{
+			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			return
+		}
+
+		if name == ""{
+			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de la particion")
+			return
+		}
+
+		a.cmd.Mount(path,name)
+	}
+
+	if comando == "show"{
+		a.cmd.ShowMount()
+	}
+
+	if comando == "pause"{
+		fmt.Println("[MIA]@Proyecto2:~$ Presione cualquier tecla para continuar")
+    	fmt.Scanln() 
+	}
+
 }

@@ -41,15 +41,24 @@ type EBR struct {
 	Part_name 	[16]byte
 }
 
+type Mounted struct {
+	Id string
+	Part Partition
+	Master MBR
+	Path string
+	Id_disco int
+}
+
 type Comandos struct {  
-    Numero int
+    Mounted_list []Mounted
+	Id_disco int
 }
 
 
-func (cmd *Comandos) Imprimir() {
-	fmt.Println(cmd.Numero)
-	cmd.Numero = cmd.Numero + 1
-}
+// func (cmd *Comandos) Imprimir() {
+// 	fmt.Println(cmd.Numero)
+// 	cmd.Numero = cmd.Numero + 1
+// }
 
 func (cmd *Comandos) Mkdisk(size int, fit byte, unit byte, path string){
 	limite := 0
@@ -238,7 +247,7 @@ func crearLogica(disco *os.File, master MBR, size int, fit byte, unit byte, name
 	if(strings.Contains(string(ebr.Part_status[:]), "0")){
 		copy(ebr.Part_status[:], "1")
 		copy(ebr.Part_fit[:], string(fit))
-		copy(ebr.Part_start[:], strconv.Itoa(inicio_libre))
+		copy(ebr.Part_start[:], strconv.Itoa(inicio_libre + len(struct_to_bytes(ebr)) ))
 		copy(ebr.Part_size[:], strconv.Itoa(size))
 		copy(ebr.Part_next[:], strconv.Itoa(-1))
 		copy(ebr.Part_name[:], name)
@@ -269,14 +278,14 @@ func crearLogica(disco *os.File, master MBR, size int, fit byte, unit byte, name
 		nuevo_ebr := getEmptyEBR()
 		copy(nuevo_ebr.Part_status[:], "1")
 		copy(nuevo_ebr.Part_fit[:], string(fit))
-		copy(nuevo_ebr.Part_start[:], strconv.Itoa(inicio_libre))
+		copy(nuevo_ebr.Part_start[:], strconv.Itoa(inicio_libre + len(struct_to_bytes(ebr))))
 		copy(nuevo_ebr.Part_size[:], strconv.Itoa(size))
 		copy(nuevo_ebr.Part_next[:], strconv.Itoa(-1))
 		copy(nuevo_ebr.Part_name[:], name)
 
 		copy(ebr.Part_next[:], strconv.Itoa(inicio_libre))
 
-		pos = bytes_to_int(ebr.Part_start[:])
+		pos = bytes_to_int(ebr.Part_start[:]) - len(struct_to_bytes(ebr))
 		ebr_bytes := struct_to_bytes(ebr)
 		disco.WriteAt(ebr_bytes, int64(pos))
 
@@ -288,6 +297,137 @@ func crearLogica(disco *os.File, master MBR, size int, fit byte, unit byte, name
 	disco.Close()
 }
 
+
+func (cmd *Comandos) Mount(path string, name string){
+	disco, err := os.OpenFile(path, os.O_RDWR, 0660)
+	if err != nil {
+		msg_error(err)
+		return
+	}
+
+	empty_mbr := MBR{}
+	size_mbr := len(struct_to_bytes(empty_mbr))
+
+	buff_mbr := make([]byte, size_mbr)
+	_, err = disco.ReadAt(buff_mbr, 0)
+	if err != nil && err != io.EOF {
+		disco.Close()
+		msg_error(err)
+		return
+	}
+	
+
+	master := bytes_to_mbr(buff_mbr)
+
+	mount_ := cmd.getId(path)
+	mount_.Path = path
+	mount_.Master = master
+
+	part_name := master.Mbr_partition_1.Part_name;
+	if(strings.Contains(string(part_name[:]), name)){
+		mount_.Part = master.Mbr_partition_1
+		cmd.Mounted_list = append(cmd.Mounted_list, mount_)
+		disco.Close()
+		return
+    }
+
+    part_name = master.Mbr_partition_2.Part_name;
+    if(strings.Contains(string(part_name[:]), name)){
+        mount_.Part = master.Mbr_partition_2
+		cmd.Mounted_list = append(cmd.Mounted_list, mount_)
+		disco.Close()
+		return
+    }
+	
+    part_name = master.Mbr_partition_3.Part_name;
+    if(strings.Contains(string(part_name[:]), name)){
+        mount_.Part = master.Mbr_partition_3
+		cmd.Mounted_list = append(cmd.Mounted_list, mount_)
+		disco.Close()
+		return
+    }
+
+    part_name = master.Mbr_partition_4.Part_name;
+    if(strings.Contains(string(part_name[:]), name)){
+		mount_.Part = master.Mbr_partition_4
+		cmd.Mounted_list = append(cmd.Mounted_list, mount_)
+		disco.Close()
+		return
+    }
+
+	if (existeExtendida(master)){
+		extendida := getExtendida(master)
+		inicio_part := bytes_to_int(extendida.Part_start[:])
+		ebr := leerEBR(disco, int64(inicio_part))
+		
+		part_name = ebr.Part_name;
+		if(strings.Contains(string(part_name[:]), name)){
+			mount_.Part = master.Mbr_partition_4
+			cmd.Mounted_list = append(cmd.Mounted_list, mount_)
+			disco.Close()
+			return
+		}
+	
+		for{
+			fmt.Println("1")
+			if(strings.Contains(string(ebr.Part_next[:]), "-1")){
+				break
+			}
+			inicio_ebr := bytes_to_int(ebr.Part_next[:])
+			ebr = leerEBR(disco, int64(inicio_ebr))
+			
+			part_name = ebr.Part_name;
+			if(strings.Contains(string(part_name[:]), name)){
+				mount_.Part = master.Mbr_partition_4
+				cmd.Mounted_list = append(cmd.Mounted_list, mount_)
+				disco.Close()
+				return
+			}
+		}
+	}
+	fmt.Println("[MIA]@Proyecto2:~$ Ha ocurrido un error al montar la particion")
+	disco.Close()
+}
+
+func (cmd *Comandos) ShowMount(){
+	fmt.Println("Particiones montadas:")
+	for _, m := range cmd.Mounted_list{
+		path := slicePath(m.Path)
+		fmt.Println("- ID:", m.Id, ", Nombre Disco:", path[len(path) - 1])
+	}
+}
+
+func (cmd *Comandos) getId(disco string) Mounted{
+	id_num := 65
+	id_disco := 0
+
+	for _, m := range cmd.Mounted_list{
+		if (disco == m.Path){
+			id_num = id_num + 1
+			id_disco = m.Id_disco
+		}
+	}
+
+	if (id_num == 65){
+		id_disco = cmd.Id_disco
+		cmd.Id_disco = cmd.Id_disco + 1
+	}
+
+	id_letra := string(rune(id_num))
+	id_disco_str := strconv.Itoa(id_disco)
+
+	id_str := "55" + id_disco_str + id_letra
+	
+	mount_ := Mounted{}
+	mount_.Id = id_str
+	mount_.Id_disco = id_disco
+	return mount_
+}
+
+func slicePath(path string) []string {
+	split := strings.Split(path, "/")
+	return split
+}
 
 func existeNombre(master MBR, nombre_s string) bool{
 
@@ -347,7 +487,6 @@ func leerEBR(disco *os.File, pos int64) EBR{
 	ebr := bytes_to_ebr(buff_ebr)
 	return ebr
 }
-
 
 func mostrar(disco *os.File, master MBR){
 	fmt.Print("[MIA]@Proyecto2:~$ ")

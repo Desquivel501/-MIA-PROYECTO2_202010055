@@ -1,1 +1,1 @@
-fdisk -type=P -path=/home/desquivel/Desktop/Disco2.dsk -unit=K -name=Particion1 -size=300
+mount -path=/home/desquivel/Desktop/Disco1.dsk -name=Particion1
