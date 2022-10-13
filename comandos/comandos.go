@@ -49,16 +49,57 @@ type Mounted struct {
 	Id_disco int
 }
 
+type SuperBlock struct {
+	S_filesystem_type    [1]byte
+	S_inodes_count       [16]byte
+	S_blocks_count       [16]byte
+	S_free_blocks_count  [16]byte
+	S_free_inodes_count  [16]byte
+	S_mtime              [16]byte
+	S_mnt_count          [16]byte
+	S_magic              [16]byte
+	S_inode_size         [16]byte
+	S_block_size         [16]byte
+	S_first_ino          [16]byte
+	S_first_blo          [16]byte
+	S_bm_inode_start     [16]byte
+	S_bm_block_start     [16]byte
+	S_inode_start        [16]byte
+	S_block_start        [16]byte
+}
+
+type Inodo struct {
+	I_uid     [3]byte
+	I_gid     [3]byte
+	I_size    [16]byte
+	I_atime   [16]byte
+	I_ctime   [16]byte
+	I_mtime   [16]byte
+	I_block   [16][16]byte
+	I_type    [1]byte
+	I_perm    [3]byte
+}
+
+type Carpeta struct{
+	B_content  [4]Content
+}
+
+type Content struct{
+	B_name   [16]byte
+	B_inodo  [16]byte
+}
+
+type Archivo struct{
+	B_content   [64]byte
+}
+
+
 type Comandos struct {  
     Mounted_list []Mounted
 	Id_disco int
 }
 
 
-// func (cmd *Comandos) Imprimir() {
-// 	fmt.Println(cmd.Numero)
-// 	cmd.Numero = cmd.Numero + 1
-// }
 
 func (cmd *Comandos) Mkdisk(size int, fit byte, unit byte, path string){
 	limite := 0
@@ -219,14 +260,10 @@ func (cmd *Comandos) Fdisk(size int, fit byte, unit byte, path string, type_ byt
 		ebr := getEmptyEBR()
 		ebr_bytes := struct_to_bytes(ebr)
 		disco.WriteAt(ebr_bytes, int64(inicio_libre))
-		// crearLogica(disco, mbr, 0, 'f', 'm', "")
 	}
 	mostrar(disco, mbr)
 
 	disco.Close()
-
-	
-
 }	
 
 func crearLogica(disco *os.File, master MBR, size int, fit byte, unit byte, name string){
@@ -397,6 +434,192 @@ func (cmd *Comandos) ShowMount(){
 	}
 }
 
+func (cmd *Comandos) GetMount(id string) (Mounted, int){
+	empty := Mounted {}
+	for _, m := range cmd.Mounted_list{
+		if(m.Id == id){
+			return m, 1
+		}
+	}
+	return empty, 0
+}
+
+func (cmd *Comandos) Mkfs(id string){
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		fmt.Println("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
+	}
+
+	currentTime := time.Now()
+	date := currentTime.Format("02-01-2006")
+
+	empty_i := Inodo{}
+	SI := len(struct_to_bytes(empty_i))
+
+	empty_b := Carpeta{}
+	SB := len(struct_to_bytes(empty_b))
+
+	empty_sb:= SuperBlock{}
+	SS := len(struct_to_bytes(empty_sb))
+
+	size_part := bytes_to_int(part.Part.Part_size[:])
+	n := getNumeroEstructuras(size_part)
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super := SuperBlock{}
+	copy(super.S_filesystem_type[:], "2")
+	copy(super.S_inodes_count[:], strconv.Itoa(n))
+	copy(super.S_blocks_count[:], strconv.Itoa(n*3))
+	copy(super.S_free_blocks_count[:], strconv.Itoa(n - 2))
+	copy(super.S_free_inodes_count[:], strconv.Itoa(n*3 - 2))
+	copy(super.S_mtime[:], date)
+	copy(super.S_mnt_count[:], strconv.Itoa(1))
+	copy(super.S_inode_size[:], strconv.Itoa(SI))
+	copy(super.S_block_size[:], strconv.Itoa(SB))
+	copy(super.S_first_ino[:], strconv.Itoa(2))
+	copy(super.S_first_blo[:], strconv.Itoa(2))
+	copy(super.S_bm_inode_start[:], strconv.Itoa(part_start + SS))
+	copy(super.S_bm_block_start[:], strconv.Itoa(part_start + SS+n))
+	copy(super.S_inode_start[:], strconv.Itoa(part_start + SS + n + 3*n))
+	copy(super.S_block_start[:], strconv.Itoa(part_start + SS + n + 3*n + SI*n ))
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		msg_error(err)
+		return
+	}
+	
+	super_bytes := struct_to_bytes(super)
+	disco.WriteAt(super_bytes, int64(part_start))
+
+	// bm_inodos := make([]byte, n)
+	// disco.WriteAt(bm_inodos, int64(part_start + SS))
+
+	// bm_bloques := make([]byte, 3*n)
+	// disco.WriteAt(bm_bloques, int64(part_start + SS + n))
+
+
+	//-----------------------------------------------------	USERS.TXT
+
+	users := Inodo{}
+	copy(users.I_uid[:], "1")
+	copy(users.I_gid[:], "1")
+	copy(users.I_size[:], strconv.Itoa(0))
+	copy(users.I_atime[:], date)
+	copy(users.I_ctime[:], date)
+	copy(users.I_type[:], "1")
+	copy(users.I_perm[:], "664")
+
+	for i := 0; i < 16; i += 1{
+		copy(users.I_block[i][:], strconv.Itoa(-1))
+	}
+	copy(users.I_block[0][:], strconv.Itoa(1))
+
+	users_txt := "1,G,root\n1,U,root,123\n"
+	start := part_start + SS + n + 3*n + SI*n 
+
+	users_arr := []byte(users_txt)
+	
+	block := Archivo{}
+	copy(block.B_content[:], users_arr)
+	block_bytes := struct_to_bytes(block)
+
+	disco.WriteAt(block_bytes, int64(start + SB))
+	
+	fmt.Println(start + SB)
+
+
+	//-----------------------------------------------------	BLOQUE CARPETA
+
+	empty_cont := Content{}
+	copy(empty_cont.B_name[:], "")
+	copy(empty_cont.B_inodo[:], strconv.Itoa(-1))
+
+	users_cont := Content{}
+	copy(users_cont.B_name[:], "users.txt")
+	copy(users_cont.B_inodo[:], strconv.Itoa(1))
+
+	root_dir := Carpeta{}
+
+	var cont_arr [4]Content
+	cont_arr[0] = users_cont
+	cont_arr[1] = empty_cont
+	cont_arr[2] = empty_cont
+	cont_arr[3] = empty_cont
+	root_dir.B_content = cont_arr
+
+	carpeta_bytes := struct_to_bytes(root_dir)
+	disco.WriteAt(carpeta_bytes, int64(start))
+
+	
+	//-----------------------------------------------------	INODO ROOT
+	root := Inodo{}
+	copy(root.I_uid[:], "1")
+	copy(root.I_gid[:], "1")
+	copy(root.I_size[:], strconv.Itoa(0))
+	copy(root.I_atime[:], date)
+	copy(root.I_ctime[:], date)
+	copy(root.I_type[:], "0")
+	copy(root.I_perm[:], "664")
+
+	for i := 0; i < 16; i += 1{
+		copy(root.I_block[i][:], strconv.Itoa(-1))
+	}
+	copy(root.I_block[0][:], strconv.Itoa(0))
+
+
+	//-----------------------------------------------------	ESCRIBIR EN DISCO
+	
+	bm_inodos := make([]byte, n)
+	disco.WriteAt(bm_inodos, int64(part_start + SS))
+
+	bm_bloques := make([]byte, 3*n)
+	disco.WriteAt(bm_bloques, int64(part_start + SS + n))
+
+	root_bytes := struct_to_bytes(root)
+	disco.WriteAt(root_bytes, int64(part_start + SS))
+
+	users_bytes := struct_to_bytes(users)
+	disco.WriteAt(users_bytes, int64(part_start + SS + SI))
+
+
+}
+
+func createFile(disco *os.File, content string, b_libre int) []int {
+	content_arr := []byte(content)
+	chunks := chunkSlice(content_arr)
+	fmt.Println(chunks)
+	pos := 0
+	var used_blocks []int
+
+	for i := 0; i < len(chunks); i += 1 {
+		block := Archivo{}
+		copy(block.B_content[:], chunks[i])
+		block_bytes := struct_to_bytes(block)
+		pos = b_libre + len(block_bytes) * i
+		disco.WriteAt(block_bytes, int64(pos))
+		used_blocks = append(used_blocks, i+1)
+	}
+	return used_blocks
+}
+
+func chunkSlice(slice []byte) [][]byte {
+	var chunks [][]byte
+	for i := 0; i < len(slice); i += 64 {
+		end := i + 64
+
+		if end > len(slice) {
+			end = len(slice)
+		}
+
+		chunks = append(chunks, slice[i:end])
+	}
+	return chunks
+}
+ 
+
 func (cmd *Comandos) getId(disco string) Mounted{
 	id_num := 65
 	id_disco := 0
@@ -566,6 +789,25 @@ func getEmptyEBR() EBR{
 	copy(ebr.Part_name[:], "")
 	return ebr
 }
+
+
+func getNumeroEstructuras(part_size int) int{
+	empty_sb:= SuperBlock{}
+	SS := len(struct_to_bytes(empty_sb))
+
+	empty_i := Inodo{}
+	SI := len(struct_to_bytes(empty_i))
+
+	empty_b := Archivo{}
+	SB := len(struct_to_bytes(empty_b))
+
+	n_1 := part_size - SS
+	n_2 := 4 + SI + 3*SB
+	n := n_1 / n_2
+
+	return int(n)
+}
+
 
 func msg_error(err error) {
 	fmt.Println("Error: ", err)

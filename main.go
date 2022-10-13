@@ -15,6 +15,7 @@ func main() {
     // mkdisk -size=2 -unit=M -path=/home/desquivel/Desktop/Disco1.dsk
     // fdisk -type=P -path=/home/desquivel/Desktop/Disco1.dsk -unit=K -name=Particion1 -size=500
     // mount -path=/home/desquivel/Desktop/Disco1.dsk -name=Particion1
+    // mkfs -id=551A
 
     // mkdisk -size=5 -unit=M -path=/home/desquivel/Desktop/Disco2.dsk
     // fdisk -type=P -path=/home/desquivel/Desktop/Disco2.dsk -unit=K -name=Particion1 -size=300

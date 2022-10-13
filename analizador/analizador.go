@@ -272,8 +272,28 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		a.cmd.ShowMount()
 	}
 
+	if comando == "mkfs"{
+		fmt.Println("Comando rmdisk")
+		id := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-id=") == 0) {
+				param = strings.Replace(param, "-id=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				id = param
+				fmt.Println("ID: ",id)
+			}
+		}
+
+		if id == ""{
+			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado el ID de la particion")
+			return
+		}
+		a.cmd.Mkfs(id)
+	}
+
 	if comando == "pause"{
-		fmt.Println("[MIA]@Proyecto2:~$ Presione cualquier tecla para continuar")
     	fmt.Scanln() 
 	}
 

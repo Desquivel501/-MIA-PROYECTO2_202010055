@@ -1,1 +1,1 @@
-mount -path=/home/desquivel/Desktop/Disco1.dsk -name=Particion1
+mkfs -id=551A
