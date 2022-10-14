@@ -1,0 +1,10 @@
+.fill {
+    height: 100%;
+    min-height: 85vh;
+}
+
+.btn_ejecutar{
+    background-color: #68889E;
+    color:#FFF;
+    border-color: #2F3E48;
+}
