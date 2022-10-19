@@ -5,8 +5,19 @@ import (
     "fmt"
 	"strings"
 	"strconv"
-	
+	"bufio"
+	"os"
+	"net/http"
+    "github.com/gin-gonic/gin"
 )
+
+type Response1 struct{
+    Resultado string `json:"resultado"`
+}
+
+type Response2 struct{
+    Instrucciones string `json:"instrucciones"`
+}
 
 type analizador struct {  
     codigo   string
@@ -51,6 +62,8 @@ func Split_txt(texto string) []string{
 
 	return splited
 }
+
+
 
 func (a *analizador) Analizar(texto string){
 	
@@ -111,23 +124,23 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		}
 
 		if path == ""{
-			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
 			return
 		}
 
 		if (fit != "FF") && (fit != "BF") && (fit != "WF"){
 			fmt.Println(fit)
-			fmt.Println("[MIA]@Proyecto2:~$ Fit incorrecto")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ Fit incorrecto")
 			return
 		}
 
 		if (unit != "M") && (unit != "K"){
-			fmt.Println("[MIA]@Proyecto2:~$ Dimensional incorrecto")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ Dimensional incorrecto")
 			return
 		}
 
 		if (size <= 0){
-			fmt.Println("[MIA]@Proyecto2:~$ Tamaño del disco incorrecto")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ Tamaño del disco incorrecto")
 			return
 		}
 
@@ -206,22 +219,22 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		}
 		
 		if path == ""{
-			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
 			return
 		}
 
 		if name == ""{
-			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de la particion")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de la particion")
 			return
 		}
 
 		if (fit != "FF") && (fit != "BF") && (fit != "WF"){
-			fmt.Println("[MIA]@Proyecto2:~$ Fit incorrecto")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ Fit incorrecto")
 			return
 		}
 
 		if (unit != "M") && (unit != "K"){
-			fmt.Println("[MIA]@Proyecto2:~$ Dimensional incorrecto")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ Dimensional incorrecto")
 			return
 		}
 
@@ -256,12 +269,12 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		}
 
 		if path == ""{
-			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
 			return
 		}
 
 		if name == ""{
-			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de la particion")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de la particion")
 			return
 		}
 
@@ -287,14 +300,72 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		}
 
 		if id == ""{
-			fmt.Println("[MIA]@Proyecto2:~$ No se ha ingresado el ID de la particion")
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el ID de la particion")
 			return
 		}
 		a.cmd.Mkfs(id)
 	}
 
-	if comando == "pause"{
-    	fmt.Scanln() 
+	// if comando == "pause"{
+    // 	fmt.Scanln() 
+	// }
+
+	if comando == "exec"{
+		fmt.Println("Comando exec")
+		path := ""
+
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-path=") == 0) {
+				param = strings.Replace(param, "-path=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				path = param
+				fmt.Println("Path: ",path)
+			}
+
+		}
+
+		if path == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado la ruta")
+			return
+		}
+
+		a.AnalizarScript(path)
 	}
 
 }
+
+
+func (a *analizador) AnalizarScript(path string){
+	
+	file, _ := os.Open(path)
+    // if err != nil {
+    //     a.cmd.AddConsola("[MIA]@Proyecto2:~$ Error al leer el archivo:"+ err)
+    // }
+    // defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+    for scanner.Scan() {
+        fmt.Println(scanner.Text())
+		a.Analizar(scanner.Text())
+    }
+
+}
+
+
+func (a *analizador) PostConsola(c *gin.Context){
+
+	var texto Response2
+	if err := c.BindJSON(&texto); err != nil {
+        return
+    }
+
+	split := strings.Split(texto.Instrucciones, "\n")
+	for _, com := range split {
+		a.Analizar(com)
+	}
+
+	res := Response1 {a.cmd.GetConsola()}
+	c.IndentedJSON(http.StatusCreated, res)
+}
+

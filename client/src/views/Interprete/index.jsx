@@ -12,7 +12,7 @@ export const Interprete = () => {
 
   const ejecutar = () => {
 
-    fetch('http://127.0.0.1:5000/interpretar', {
+    fetch('http://127.0.0.1:5000/consola', {
       method: 'POST',
       body: JSON.stringify({instrucciones:code}),
       headers: {
