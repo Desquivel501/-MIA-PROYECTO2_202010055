@@ -6,10 +6,11 @@ import (
 	"bytes"
 	"encoding/gob"
 	"io"
-	"math/rand"
 	"strconv"
 	"time"
 	"strings"
+	"math/rand"
+	// "math"
 )
 
 type MBR struct {  
@@ -98,6 +99,7 @@ type Comandos struct {
     Mounted_list []Mounted
 	Id_disco int
 	Consola []string
+	Graph string
 }
 
 
@@ -529,11 +531,11 @@ func (cmd *Comandos) Mkfs(id string){
 	copy(users.I_type[:], "1")
 	copy(users.I_perm[:], "664")
 
-	for i := 0; i < 16; i += 1{
+	copy(users.I_block[0][:], strconv.Itoa(1))
+	for i := 1; i < 16; i += 1{
 		copy(users.I_block[i][:], strconv.Itoa(-1))
 	}
-	copy(users.I_block[0][:], strconv.Itoa(1))
-
+	
 	users_txt := "1,G,root\n1,U,root,123\n"
 	start := part_start + SS + n + 3*n + SI*n 
 
@@ -580,11 +582,13 @@ func (cmd *Comandos) Mkfs(id string){
 	copy(root.I_ctime[:], date)
 	copy(root.I_type[:], "0")
 	copy(root.I_perm[:], "664")
-
-	for i := 0; i < 16; i += 1{
+	
+	copy(root.I_block[0][:], strconv.Itoa(0))
+	
+	for i := 1; i < 16; i += 1{
 		copy(root.I_block[i][:], strconv.Itoa(-1))
 	}
-	copy(root.I_block[0][:], strconv.Itoa(0))
+	
 
 
 	//-----------------------------------------------------	ESCRIBIR EN DISCO
@@ -596,13 +600,89 @@ func (cmd *Comandos) Mkfs(id string){
 	disco.WriteAt(bm_bloques, int64(part_start + SS + n))
 
 	root_bytes := cmd.struct_to_bytes(root)
-	disco.WriteAt(root_bytes, int64(part_start + SS))
+	disco.WriteAt(root_bytes, int64(part_start + SS + n + 3*n))
 
 	users_bytes := cmd.struct_to_bytes(users)
-	disco.WriteAt(users_bytes, int64(part_start + SS + SI))
+	disco.WriteAt(users_bytes, int64(part_start + SS + n + 3*n + SI))
 
 
 }
+
+func (cmd *Comandos) GetUsers(id string){
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		return
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	// fmt.Println(super_block)
+
+	inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	inodo_root := cmd.leerInodo(disco, int64(inicio_root))
+
+	
+	carpeta := cmd.leerCarpeta(disco, int64(block_start))
+
+	fmt.Println(inodo_root)
+	fmt.Println("")
+	fmt.Println(carpeta)
+	fmt.Println("")
+
+	contenido := carpeta.B_content[0]
+	fmt.Println(string(contenido.B_name[:]))
+	fmt.Println("")
+
+	num_inodo_users := bytes_to_int(contenido.B_inodo[:])
+	// fmt.Println(inodo_users)
+	// fmt.Println("")
+
+
+	inodo_users := cmd.leerInodo(disco, int64(inicio_root + num_inodo_users*inodo_size))
+	fmt.Println(inodo_users)
+	fmt.Println("")
+
+
+	contenido_str := ""
+	for i := 0; i < 16; i += 1{
+
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+		
+		// fmt.Println(bloque_pos)
+		
+		contenido_str += string(bloque.B_content[:])
+	}
+
+	fmt.Println(contenido_str)
+
+	// inicio_user
+
+	// for i := 0; i < 16; i += 1{
+	// 	fmt.Println(bytes_to_int(inodo_root.I_block[i][:]))
+	// }
+
+
+
+
+
+
+}
+
+
 
 func (cmd *Comandos)createFile(disco *os.File, content string, b_libre int) []int {
 	content_arr := []byte(content)
@@ -728,6 +808,44 @@ func (cmd *Comandos)leerEBR(disco *os.File, pos int64) EBR{
 	return ebr
 }
 
+
+func (cmd *Comandos)leerInodo(disco *os.File, pos int64) Inodo{
+	empty_ebr := Inodo{}
+	size_ebr := len(cmd.struct_to_bytes(empty_ebr))
+	buff_ebr := make([]byte, size_ebr)
+	disco.ReadAt(buff_ebr, pos)
+	ebr := cmd.bytes_to_inodo(buff_ebr)
+	return ebr
+}
+
+func (cmd *Comandos)leerSuper(disco *os.File, pos int64) SuperBlock{
+	empty_sb := SuperBlock{}
+	size_sb := len(cmd.struct_to_bytes(empty_sb))
+	buff_sb := make([]byte, size_sb)
+	disco.ReadAt(buff_sb, pos)
+	sb := cmd.bytes_to_super(buff_sb)
+	return sb
+}
+
+func (cmd *Comandos)leerCarpeta(disco *os.File, pos int64) Carpeta{
+	empty_sb := Carpeta{}
+	size_sb := len(cmd.struct_to_bytes(empty_sb))
+	buff_sb := make([]byte, size_sb)
+	disco.ReadAt(buff_sb, pos)
+	sb := cmd.bytes_to_carpeta(buff_sb)
+	return sb
+}
+
+func (cmd *Comandos)leerArchivo(disco *os.File, pos int64) Archivo{
+	empty_sb := Archivo{}
+	size_sb := len(cmd.struct_to_bytes(empty_sb))
+	buff_sb := make([]byte, size_sb)
+	disco.ReadAt(buff_sb, pos)
+	sb := cmd.bytes_to_archivo(buff_sb)
+	return sb
+}
+
+
 func (cmd *Comandos)mostrar(disco *os.File, master MBR){
 
 	
@@ -784,6 +902,159 @@ func (cmd *Comandos)mostrarExtendida(disco *os.File, extendida Partition){
 		ebr = cmd.leerEBR(disco, int64(inicio_ebr))
 		cmd.AddConsola("---- Name "+string(ebr.Part_name[:])+ ", Size: "+ string(ebr.Part_size[:])+ ", Start: "+ string(ebr.Part_start[:]));
 	}
+}
+
+
+func (cmd *Comandos) RepDisco(id string) {
+	dot := ""
+	
+	for _, m := range cmd.Mounted_list{
+		if(m.Id == id){
+
+			disco, err := os.OpenFile(m.Path, os.O_RDWR, 0660)
+			if err != nil {
+				cmd.msg_error(err)
+				return
+			}
+			
+			nombre := m.Path
+			nombre_arr := slicePath(nombre)
+			nombre = nombre_arr[len(nombre_arr) - 1]
+
+			dot += "digraph G {\n"
+            dot += "fontname=\"Helvetica,Arial,sans-serif\"\n"
+            dot += "node [fontname=\"Helvetica,Arial,sans-serif\"]\n"
+            dot += "rankdir=TB;\n"; 
+            dot += " node [shape=record];\n"
+			
+			dot += "label=\"" + nombre + "\"\n"
+			
+			dot += "a[label = \" "
+            dot += "MBR"
+			
+			disk_size := bytes_to_int(m.Master.Mbr_tamano[:])
+			
+			size_mbr := len(cmd.struct_to_bytes(m.Master))
+			
+			// mbr_ocupado := (size_mbr / disk_size) * 100
+			
+			ocupado := 0.0
+			part_size := 0
+			total_ocupado := size_mbr
+
+			
+
+			if(strings.Contains(string(m.Master.Mbr_partition_1.Part_status[:]), "1")){
+				part_size = bytes_to_int(m.Master.Mbr_partition_1.Part_size[:])
+				total_ocupado += part_size
+
+				if(strings.Contains(string(m.Master.Mbr_partition_1.Part_type[:]), "E")){
+					dot += "| {Extendida | {"
+					dot += cmd.repExtendida(disco, m.Master.Mbr_partition_1, disk_size, part_size)
+					dot += "}}"
+				}else{
+					ocupado = (float64(part_size) / float64(disk_size))*100
+					dot += " | Primaria \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+				}
+
+			}
+
+			if(strings.Contains(string(m.Master.Mbr_partition_2.Part_status[:]), "1")){
+				part_size = bytes_to_int(m.Master.Mbr_partition_2.Part_size[:])
+				total_ocupado += part_size
+
+				if(strings.Contains(string(m.Master.Mbr_partition_2.Part_type[:]), "E")){
+					dot += "| {Extendida | {"
+					dot += cmd.repExtendida(disco, m.Master.Mbr_partition_2, disk_size, part_size)
+					dot += "}}"
+				}else{
+					ocupado = (float64(part_size) / float64(disk_size))*100
+					dot += " | Primaria \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+				}
+
+				
+
+			}
+
+			if(strings.Contains(string(m.Master.Mbr_partition_3.Part_status[:]), "1")){
+				part_size = bytes_to_int(m.Master.Mbr_partition_3.Part_size[:])
+				total_ocupado += part_size
+
+				if(strings.Contains(string(m.Master.Mbr_partition_3.Part_type[:]), "E")){
+					dot += "| {Extendida | {"
+					dot += cmd.repExtendida(disco, m.Master.Mbr_partition_3, disk_size, part_size)
+					dot += "}}"
+				}else{
+					ocupado = (float64(part_size) / float64(disk_size))*100
+					dot += " | Primaria \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+				}
+
+			}
+
+			if(strings.Contains(string(m.Master.Mbr_partition_4.Part_status[:]), "1")){
+				part_size = bytes_to_int(m.Master.Mbr_partition_4.Part_size[:])
+				total_ocupado += part_size
+
+				if(strings.Contains(string(m.Master.Mbr_partition_4.Part_type[:]), "E")){
+					dot += "| {Extendida | {"
+					dot += cmd.repExtendida(disco, m.Master.Mbr_partition_4, disk_size, part_size)
+					dot += "}}"
+				}else{
+					ocupado = (float64(part_size) / float64(disk_size))*100
+					dot += " | Primaria \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+				}
+
+			}
+			
+			ocupado = (float64(disk_size - total_ocupado) / float64(disk_size))*100
+			dot += "| Libre \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+
+			dot += "\"]"
+			dot += "}\n"
+		}
+
+	}
+	cmd.Graph = dot
+}
+
+
+func (cmd *Comandos)repExtendida(disco *os.File, extendida Partition, size_total int, size_part int) string{
+	inicio_part := bytes_to_int(extendida.Part_start[:])
+	ebr := cmd.leerEBR(disco, int64(inicio_part))
+	
+	dot := ""
+
+	logica_size := 0
+	ext_size := 0
+	ocupado := 0.0
+
+	if(strings.Contains(string(ebr.Part_status[:]), "1")){
+		logica_size = bytes_to_int(ebr.Part_size[:])
+		ext_size += logica_size
+
+		ocupado = (float64(logica_size) / float64(size_total))*100
+		dot += "Logica \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+
+		for{
+			if(strings.Contains(string(ebr.Part_next[:]), "-1")){
+				break
+			}
+			inicio_ebr := bytes_to_int(ebr.Part_next[:])
+			ebr = cmd.leerEBR(disco, int64(inicio_ebr))
+
+			logica_size = bytes_to_int(ebr.Part_size[:])
+			ext_size += logica_size
+
+			ocupado = (float64(logica_size) / float64(size_total))*100
+			dot += "| Logica \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+
+		}
+	}
+
+	ocupado = (float64(size_part - ext_size) / float64(size_total))*100
+	dot += "| Libre \\n" + fmt.Sprintf("%.2f", ocupado) + "%"
+
+	return dot
 }
 
 func getEmptyPartition() Partition{
@@ -854,6 +1125,56 @@ func (cmd *Comandos)bytes_to_mbr(s []byte) MBR {
 
 func (cmd *Comandos)bytes_to_ebr(s []byte) EBR {
 	p := EBR{}
+	dec := gob.NewDecoder(bytes.NewReader(s))
+	err := dec.Decode(&p)
+	if err != nil && err != io.EOF {
+		cmd.msg_error(err)
+	}
+	return p
+}
+
+func (cmd *Comandos)bytes_to_super(s []byte) SuperBlock {
+	p := SuperBlock{}
+	dec := gob.NewDecoder(bytes.NewReader(s))
+	err := dec.Decode(&p)
+	if err != nil && err != io.EOF {
+		cmd.msg_error(err)
+	}
+	return p
+}
+
+func (cmd *Comandos)bytes_to_inodo(s []byte) Inodo {
+	p := Inodo{}
+	dec := gob.NewDecoder(bytes.NewReader(s))
+	err := dec.Decode(&p)
+	if err != nil && err != io.EOF {
+		cmd.msg_error(err)
+	}
+	return p
+}
+
+func (cmd *Comandos)bytes_to_carpeta(s []byte) Carpeta {
+	p := Carpeta{}
+	dec := gob.NewDecoder(bytes.NewReader(s))
+	err := dec.Decode(&p)
+	if err != nil && err != io.EOF {
+		cmd.msg_error(err)
+	}
+	return p
+}
+
+func (cmd *Comandos)bytes_to_content(s []byte) Content {
+	p := Content{}
+	dec := gob.NewDecoder(bytes.NewReader(s))
+	err := dec.Decode(&p)
+	if err != nil && err != io.EOF {
+		cmd.msg_error(err)
+	}
+	return p
+}
+
+func (cmd *Comandos)bytes_to_archivo(s []byte) Archivo {
+	p := Archivo{}
 	dec := gob.NewDecoder(bytes.NewReader(s))
 	err := dec.Decode(&p)
 	if err != nil && err != io.EOF {

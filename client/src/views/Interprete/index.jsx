@@ -2,13 +2,22 @@
 import { Console } from '../../components/Console';
 import { Button } from 'react-bootstrap';
 import { useState } from 'react';
-
+import { Graphviz } from "graphviz-react";
 
 import './index.css';
 
 export const Interprete = () => {
   const [code, setCode] = useState('');
   const [consoleText, setConsoleText] = useState('');
+  const [graph, setGraph] = useState('graph G{}');
+
+  // let graph = "graph G{}"
+  let Options = {
+    fit: true,
+    height: 700,
+    width: 1000,
+    zoom: true,
+  };
 
   const ejecutar = () => {
 
@@ -21,8 +30,10 @@ export const Interprete = () => {
     })
       .then(resp => resp.json())
       .then(data => {
+
+        setGraph(data.reporte)
         setConsoleText(data.resultado)
-        navigator.clipboard.writeText(data.resultado)
+
       })
       .catch(console.error);   
   }
@@ -43,6 +54,8 @@ export const Interprete = () => {
   };
 
   return (
+    <div>
+
     <div className="d-flex fill flex-column justify-content-start">
 
       <div className='row flex-grow-1 mt-3'>
@@ -65,11 +78,24 @@ export const Interprete = () => {
       </div>
 
       <div className='row flex-grow-1 mt-3'>
-        <Console code={code} setCode={setCode}></ Console>
-        <Console readOnly code={consoleText} setCode={setConsoleText}></Console>
+          <Console code={code} setCode={setCode}></ Console>
+          <Console readOnly code={consoleText} setCode={setConsoleText}></Console>
       </div>
-      
+
       <input id="fileInput" type="file" onChange={cargarArchivo} style={{ display: "none" }} />
     </div>
+
+    <div class='wrapper_graph mt-3' id="graphviz">
+        <h4 className="text-light">Reporte</h4>
+        <Graphviz 
+          classname = "canvas" 
+          dot={graph}
+          options = {Options}
+        />
+    </div>
+
+    </div>
+
+    
   )
 }

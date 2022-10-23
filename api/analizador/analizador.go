@@ -13,6 +13,7 @@ import (
 
 type Response1 struct{
     Resultado string `json:"resultado"`
+	Reporte string `json:"reporte"`
 }
 
 type Response2 struct{
@@ -27,6 +28,7 @@ type analizador struct {
 func New(codigo string) analizador{
 	var cmd comandos.Comandos 
 	cmd.Id_disco = 1
+	cmd.Graph = "graph G{}"
 	a := analizador {codigo, cmd}
 	return a
 }
@@ -285,6 +287,22 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		a.cmd.ShowMount()
 	}
 
+	if comando == "users"{
+		id := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-id=") == 0) {
+				param = strings.Replace(param, "-id=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				id = param
+				fmt.Println("ID: ",id)
+			}
+		}
+
+		a.cmd.GetUsers(id)
+	}
+
 	if comando == "mkfs"{
 		fmt.Println("Comando rmdisk")
 		id := ""
@@ -309,6 +327,34 @@ func (a *analizador) Identificar(comando string, parametros []string){
 	// if comando == "pause"{
     // 	fmt.Scanln() 
 	// }
+
+	if comando == "rep"{
+		name := ""
+		id := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-name=") == 0) {
+				param = strings.Replace(param, "-name=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				name = param
+				fmt.Println("Name: ",name)
+			}
+
+			if (strings.Index(param, "-id=") == 0) {
+				param = strings.Replace(param, "-id=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				id = param
+				fmt.Println("Id: ",id)
+			}
+
+		}
+
+		if(name == "mbr"){
+            a.cmd.RepDisco(id);
+        }
+	
+	}
 
 	if comando == "exec"{
 		fmt.Println("Comando exec")
@@ -355,6 +401,11 @@ func (a *analizador) AnalizarScript(path string){
 
 func (a *analizador) PostConsola(c *gin.Context){
 
+	var Consola []string
+
+	a.cmd.Consola = Consola
+	a.cmd.Graph = "graph G{}"
+
 	var texto Response2
 	if err := c.BindJSON(&texto); err != nil {
         return
@@ -365,7 +416,16 @@ func (a *analizador) PostConsola(c *gin.Context){
 		a.Analizar(com)
 	}
 
-	res := Response1 {a.cmd.GetConsola()}
+	// graph := `graph {
+	// 	grandparent -- "parent A";
+	// 	child;
+	// 	"parent B" -- child;
+	// 	grandparent --  "parent B";
+	//   }`
+
+	fmt.Println(a.cmd.Graph)
+
+	res := Response1 {a.cmd.GetConsola(), a.cmd.Graph}
 	c.IndentedJSON(http.StatusCreated, res)
 }
 
