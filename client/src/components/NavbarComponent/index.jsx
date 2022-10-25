@@ -1,7 +1,6 @@
+
 import Nav from 'react-bootstrap/Nav';
 import Navbar from 'react-bootstrap/Navbar';
-import NavDropdown from 'react-bootstrap/NavDropdown';
-
 import { Link } from "react-router-dom";
 
 export const NavbarComponent = () => {
@@ -19,11 +18,15 @@ export const NavbarComponent = () => {
                 height="30"
                 className="d-inline-block align-top"
               />
-              {' '}Consola</Navbar.Brand>
+              {' '}Inicio</Navbar.Brand>
             </Nav.Item> 
             <Nav.Item>
-            <Nav.Link as={Link} to="/about">Acerca de</Nav.Link>
+                <Nav.Link as={Link} to="/about">Acerca de</Nav.Link>
             </Nav.Item>
+            {/* <NavItem>
+               <Nav.Link as={Link} to="/login">Login</Nav.Link>
+            </NavItem> */}
+            
         </Nav>
       </Navbar>
 

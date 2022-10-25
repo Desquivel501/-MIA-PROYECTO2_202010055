@@ -3,13 +3,19 @@ import { Console } from '../../components/Console';
 import { Button } from 'react-bootstrap';
 import { useState } from 'react';
 import { Graphviz } from "graphviz-react";
-
 import './index.css';
+import swal from 'sweetalert';
+import { Link } from "react-router-dom";
+
 
 export const Interprete = () => {
   const [code, setCode] = useState('');
   const [consoleText, setConsoleText] = useState('');
   const [graph, setGraph] = useState('graph G{}');
+  const [state, setState] = useState(0);
+  
+
+  const user = localStorage.getItem("user")
 
   // let graph = "graph G{}"
   let Options = {
@@ -18,6 +24,30 @@ export const Interprete = () => {
     width: 1000,
     zoom: true,
   };
+
+  const logout = () => {
+
+    // if (window.confirm("¿Desea cerrar sesión?")) {
+    //   localStorage.setItem("user", "")
+    //   setState(state+1)
+    // }
+    swal({
+      title: "¿Desea cerrar sesion?",
+      icon: "warning",
+      buttons: true,
+      dangerMode: true,
+    })
+    .then((willLogout) => {
+      if (willLogout) {
+        swal("Se ha cerrrado la sesion", {
+          icon: "success",
+        });
+        localStorage.setItem("user", "")
+        setState(state+1)
+      } 
+    });
+    
+  }
 
   const ejecutar = () => {
 
@@ -53,11 +83,38 @@ export const Interprete = () => {
     reader.readAsText(e.target.files[0])
   };
 
+  
+  
+  // alert(user)
+
   return (
     <div>
 
     <div className="d-flex fill flex-column justify-content-start">
 
+    {user != "" &&        
+      <div className='row justify-content-end mt-3'>
+      <Button
+              style={{width:"15%"}}
+              className='mx-2'
+              variant="warning"
+              onClick={logout}
+        >Cerrar Sesion</Button>
+      </div>    
+    }
+
+  {user == "" &&        
+      <div className='row justify-content-end mt-3'>
+      <Button
+              style={{width:"15%"}}
+              className='mx-2'
+              variant="warning"
+              as={Link} to="/login"
+        >Iniciar Sesion</Button>
+      </div>    
+    }
+
+    
       <div className='row flex-grow-1 mt-3'>
         <Button
               className='col-sm mx-2'
@@ -99,3 +156,5 @@ export const Interprete = () => {
     
   )
 }
+
+
