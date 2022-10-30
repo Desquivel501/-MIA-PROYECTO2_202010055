@@ -100,6 +100,9 @@ type Comandos struct {
 	Id_disco int
 	Consola []string
 	Graph string
+	Usuario string
+	Root bool
+	Part_id string
 }
 
 
@@ -536,7 +539,7 @@ func (cmd *Comandos) Mkfs(id string){
 		copy(users.I_block[i][:], strconv.Itoa(-1))
 	}
 	
-	users_txt := "1,G,root\n1,U,root,123\n"
+	users_txt := "1,G,root\n1,U,root,123"
 	start := part_start + SS + n + 3*n + SI*n 
 
 	users_arr := []byte(users_txt)
@@ -589,8 +592,6 @@ func (cmd *Comandos) Mkfs(id string){
 		copy(root.I_block[i][:], strconv.Itoa(-1))
 	}
 	
-
-
 	//-----------------------------------------------------	ESCRIBIR EN DISCO
 	
 	bm_inodos := make([]byte, n)
@@ -605,20 +606,22 @@ func (cmd *Comandos) Mkfs(id string){
 	users_bytes := cmd.struct_to_bytes(users)
 	disco.WriteAt(users_bytes, int64(part_start + SS + n + 3*n + SI))
 
+	cmd.AddConsola("[MIA]@Proyecto2:~$ La particion " + id + " ha sido formateada exitosamente")
 
+	disco.Close()
 }
 
-func (cmd *Comandos) GetUsers(id string){
+func (cmd *Comandos) GetUsers(id string) (string, string) {
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
-		return
+		return "ERROR", "[MIA]@Proyecto2:~$ La particion no ha sido montada"
 	}
 
 	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
 	if err != nil {
 		cmd.msg_error(err)
-		return
+		return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
 	}
 
 	part_start := bytes_to_int(part.Part.Part_start[:])
@@ -629,62 +632,672 @@ func (cmd *Comandos) GetUsers(id string){
 	block_size := bytes_to_int(super_block.S_block_size[:])
 	block_start := bytes_to_int(super_block.S_block_start[:])
 
-	// fmt.Println(super_block)
-
 	inicio_root := bytes_to_int(super_block.S_inode_start[:])
-	inodo_root := cmd.leerInodo(disco, int64(inicio_root))
-
 	
 	carpeta := cmd.leerCarpeta(disco, int64(block_start))
 
-	fmt.Println(inodo_root)
-	fmt.Println("")
-	fmt.Println(carpeta)
-	fmt.Println("")
-
 	contenido := carpeta.B_content[0]
-	fmt.Println(string(contenido.B_name[:]))
-	fmt.Println("")
 
 	num_inodo_users := bytes_to_int(contenido.B_inodo[:])
-	// fmt.Println(inodo_users)
-	// fmt.Println("")
-
 
 	inodo_users := cmd.leerInodo(disco, int64(inicio_root + num_inodo_users*inodo_size))
-	fmt.Println(inodo_users)
-	fmt.Println("")
-
 
 	contenido_str := ""
 	for i := 0; i < 16; i += 1{
-
+		
 		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+
+		if(bloque_pos == -1){
+			continue
+		}
+
 		bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+
+		// fmt.Println(strconv.Itoa(bloque_pos) + "------" + strconv.Itoa(block_size) + " --- " +strconv.Itoa(block_start + bloque_pos*block_size))
+
+		content := bytes.Trim(bloque.B_content[:], "\x00")
 		
-		// fmt.Println(bloque_pos)
-		
-		contenido_str += string(bloque.B_content[:])
+		contenido_str += string(content[:])
 	}
 
 	fmt.Println(contenido_str)
-
-	// inicio_user
-
-	// for i := 0; i < 16; i += 1{
-	// 	fmt.Println(bytes_to_int(inodo_root.I_block[i][:]))
-	// }
+	disco.Close()
+	return contenido_str, ""
+}
 
 
+func (cmd *Comandos)Login(usuario string, password string, id string) string{
+
+	texto, error_msg := cmd.GetUsers(id)
+	if texto == "ERROR"{
+		return error_msg
+	}
+	 
+	lineas := strings.Split(texto, "\n")
+
+	for _, linea := range lineas {
+
+		if linea == ""{
+			continue
+		}
+
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == "0"{
+			continue
+		}
+
+		if linea_array[1] == "G"{
+			fmt.Println("Grupo: " + linea_array[2])
+		}
+
+		
+		if linea_array[1] == "U"{
+			fmt.Println("Usuario: " + linea_array[2] + ", Contraseña: " + linea_array[3])
+
+			if(linea_array[2] == usuario){
+				if(linea_array[3] == password){
+
+					if(linea_array[2] == "root"){
+						cmd.Root = true
+					}
+					cmd.Part_id = id
+					cmd.Usuario = usuario
+
+					return ""
+				}
+				return "[MIA]@Proyecto2:~$ Contraseña Incorrecta"
+			}
+		} 
+	} 
+	return "[MIA]@Proyecto2:~$ No se ha encontrado el usuario"
+}
 
 
+func (cmd *Comandos) Logout() string {
+
+	username := cmd.Usuario
+	if (username == ""){
+		return "[MIA]@Proyecto2:~$ No se ha iniciado sesion"
+	}
+
+	cmd.Root = false
+	cmd.Part_id = ""
+	cmd.Usuario = ""
+	return ""
+}
 
 
+func (cmd *Comandos) Mkusr(username string, password string, grupo string){
+
+	if( cmd.Root == false){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+	}
+
+	id := cmd.Part_id
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	carpeta := cmd.leerCarpeta(disco, int64(block_start))
+
+	contenido := carpeta.B_content[0]
+
+	num_inodo_users := bytes_to_int(contenido.B_inodo[:])
+
+	inodo_users := cmd.leerInodo(disco, int64(inicio_root + num_inodo_users*inodo_size))
+
+	contenido_str := ""
+	for i := 0; i < 16; i += 1{
+		
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+
+		content := bytes.Trim(bloque.B_content[:], "\x00")
+
+		contenido_str += string(content[:])
+	}
+
+	lineas := strings.Split(contenido_str, "\n")
+
+	for _, linea := range lineas {
+		if linea == ""{
+			continue
+		}
+
+		// fmt.Println("---------------" + linea)
+
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == "0"{
+			continue
+		}
+
+		if linea_array[1] == "U"{
+			if(linea_array[2] == username){
+				disco.Close()
+				cmd.AddConsola("[MIA]@Proyecto2:~$ Ya existe un usuario con ese nombre")
+				return
+			}
+		}
+
+		
+	} 
+
+	existe_grupo := false
+	cont := 0
+	group_id := ""
+
+	for i, linea := range lineas {
+		if linea == ""{
+			continue
+		}
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == "0"{
+			continue
+		}
+
+		if linea_array[1] == "G"{
+			// fmt.Println("Grupo: " + linea_array[2])
+			if(linea_array[2] == grupo){
+				existe_grupo = true
+				cont = i + 1
+				group_id = linea_array[0]
+				break
+			}
+		}
+		
+	} 
+	if(existe_grupo != true){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ No existe el grupo")
+		disco.Close()
+		return
+	}
+
+	// fmt.Println(group_id)
+	nuevo_usuario := group_id + ",U," + username + "," + password
+
+	lineas = append(lineas, "")
+	copy(lineas[cont+1:], lineas[cont:])
+	lineas[cont] = nuevo_usuario
+	
+	nuevo_txt := strings.Join(lineas[:], "\n")
+	fmt.Println(nuevo_txt)
+
+
+	content_arr := []byte(nuevo_txt)
+	chunks := chunkSlice(content_arr)
+	
+	pos := 0
+
+	b_inicio := bytes_to_int(super_block.S_first_blo[:])
+
+	var empty [16]byte
+
+	for i := 0; i < len(chunks); i += 1 {
+
+		if(i == 16){
+			break
+		}
+
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		
+		if(bloque_pos != -1){
+			pos = block_start + bloque_pos*block_size
+		} else {
+			pos = block_start + b_inicio*block_size
+			
+			inodo_users.I_block[i] = empty
+
+			copy(inodo_users.I_block[i][:], strconv.Itoa(b_inicio))
+			b_inicio = b_inicio + 1
+		}
+
+		block := Archivo{}
+		copy(block.B_content[:], chunks[i])
+		block_bytes := cmd.struct_to_bytes(block)
+		disco.WriteAt(block_bytes, int64(pos))		
+	}
+
+
+	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
+	super_bytes := cmd.struct_to_bytes(super_block)
+	disco.WriteAt(super_bytes, int64(part_start))
+
+	root_bytes := cmd.struct_to_bytes(inodo_users)
+	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
+
+
+	// cmd.WriteFile(disco )
+	disco.Close()
+}
+
+
+func (cmd *Comandos) Mkgrp(group_name string){
+
+	if( cmd.Root == false){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+	}
+
+	id := cmd.Part_id
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	carpeta := cmd.leerCarpeta(disco, int64(block_start))
+
+	contenido := carpeta.B_content[0]
+
+	num_inodo_users := bytes_to_int(contenido.B_inodo[:])
+
+	inodo_users := cmd.leerInodo(disco, int64(inicio_root + num_inodo_users*inodo_size))
+
+	contenido_str := ""
+	for i := 0; i < 16; i += 1{
+		
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+
+		content := bytes.Trim(bloque.B_content[:], "\x00")
+
+		contenido_str += string(content[:])
+	}
+
+	lineas := strings.Split(contenido_str, "\n")
+
+	existe_grupo := false
+	group_id := 0
+
+	for _, linea := range lineas {
+		if linea == ""{
+			continue
+		}
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == "0"{
+			continue
+		}
+
+		if linea_array[1] == "G"{
+			// fmt.Println("Grupo: " + linea_array[2])
+			if(linea_array[2] == group_name){
+				existe_grupo = true
+				break
+			}
+
+			id := linea_array[0]
+			id_int, _ := strconv.Atoi(id)
+			if(group_id < id_int){
+				group_id = id_int
+			}
+		}
+		
+	} 
+	if(existe_grupo == true){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ Ya existe un grupo con ese nombre")
+		disco.Close()
+		return
+	}
+
+	group_id = group_id + 1
+	// fmt.Println(group_id)
+	nuevo_grupo := strconv.Itoa(group_id) + ",G," + group_name
+
+	lineas = append(lineas, nuevo_grupo)
+	
+	nuevo_txt := strings.Join(lineas[:], "\n")
+	// fmt.Println(nuevo_txt)
+
+
+	content_arr := []byte(nuevo_txt)
+	chunks := chunkSlice(content_arr)
+	
+	pos := 0
+
+	b_inicio := bytes_to_int(super_block.S_first_blo[:])
+
+	var empty [16]byte
+
+	for i := 0; i < len(chunks); i += 1 {
+
+		if(i == 16){
+			break
+		}
+
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		
+		if(bloque_pos != -1){
+			pos = block_start + bloque_pos*block_size
+		} else {
+			pos = block_start + b_inicio*block_size
+			inodo_users.I_block[i] = empty
+			copy(inodo_users.I_block[i][:], strconv.Itoa(b_inicio))
+			b_inicio = b_inicio + 1
+		}
+
+		block := Archivo{}
+		copy(block.B_content[:], chunks[i])
+		block_bytes := cmd.struct_to_bytes(block)
+		disco.WriteAt(block_bytes, int64(pos))		
+	}
+
+
+	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
+	super_bytes := cmd.struct_to_bytes(super_block)
+	disco.WriteAt(super_bytes, int64(part_start))
+
+	root_bytes := cmd.struct_to_bytes(inodo_users)
+	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
+
+
+	// cmd.WriteFile(disco )
+	disco.Close()
+}
+
+
+func (cmd *Comandos) Rmgrp(group_name string){
+
+	if( cmd.Root == false){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+	}
+
+	id := cmd.Part_id
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	carpeta := cmd.leerCarpeta(disco, int64(block_start))
+
+	contenido := carpeta.B_content[0]
+
+	num_inodo_users := bytes_to_int(contenido.B_inodo[:])
+
+	inodo_users := cmd.leerInodo(disco, int64(inicio_root + num_inodo_users*inodo_size))
+
+	contenido_str := ""
+	for i := 0; i < 16; i += 1{
+		
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+
+		content := bytes.Trim(bloque.B_content[:], "\x00")
+
+		contenido_str += string(content[:])
+	}
+
+	lineas := strings.Split(contenido_str, "\n")
+
+	group_id := ""
+
+	for _, linea := range lineas {
+		if linea == ""{
+			continue
+		}
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == "0"{
+			continue
+		}
+
+		if linea_array[1] == "G"{
+			// fmt.Println("Grupo: " + linea_array[2])
+			if(linea_array[2] == group_name){
+				group_id = linea_array[0]
+				break
+			}
+		}
+		
+	} 
+
+	if(group_id == ""){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ El grupo no existe o ya ha sido eliminado")
+		disco.Close()
+		return
+	}
+
+	var nuevas_lineas []string
+	for _, linea := range lineas {
+		if linea == ""{
+			continue
+		}
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == group_id{
+			linea_array[0] = "0"
+		}
+
+		n_linea := strings.Join(linea_array, ",")
+		nuevas_lineas = append(nuevas_lineas, n_linea)
+	}
+	
+	nuevo_txt := strings.Join(nuevas_lineas[:], "\n")
+
+	content_arr := []byte(nuevo_txt)
+	chunks := chunkSlice(content_arr)
+	
+	pos := 0
+
+	b_inicio := bytes_to_int(super_block.S_first_blo[:])
+
+	var empty [16]byte
+
+	for i := 0; i < len(chunks); i += 1 {
+
+		if(i == 16){
+			break
+		}
+
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		
+		if(bloque_pos != -1){
+			pos = block_start + bloque_pos*block_size
+		} else {
+			pos = block_start + b_inicio*block_size
+			inodo_users.I_block[i] = empty
+			copy(inodo_users.I_block[i][:], strconv.Itoa(b_inicio))
+			b_inicio = b_inicio + 1
+		}
+
+		block := Archivo{}
+		copy(block.B_content[:], chunks[i])
+		block_bytes := cmd.struct_to_bytes(block)
+		disco.WriteAt(block_bytes, int64(pos))		
+	}
+
+
+	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
+	super_bytes := cmd.struct_to_bytes(super_block)
+	disco.WriteAt(super_bytes, int64(part_start))
+
+	root_bytes := cmd.struct_to_bytes(inodo_users)
+	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
+
+	disco.Close()
+}
+
+func (cmd *Comandos) Rmusr(username string){
+
+	if( cmd.Root == false){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+	}
+
+	id := cmd.Part_id
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	carpeta := cmd.leerCarpeta(disco, int64(block_start))
+
+	contenido := carpeta.B_content[0]
+
+	num_inodo_users := bytes_to_int(contenido.B_inodo[:])
+
+	inodo_users := cmd.leerInodo(disco, int64(inicio_root + num_inodo_users*inodo_size))
+
+	contenido_str := ""
+	for i := 0; i < 16; i += 1{
+		
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+
+		content := bytes.Trim(bloque.B_content[:], "\x00")
+
+		contenido_str += string(content[:])
+	}
+
+	lineas := strings.Split(contenido_str, "\n")
+	var nuevas_lineas []string
+	eliminado := false
+	for _, linea := range lineas {
+		if linea == ""{
+			continue
+		}
+		linea_array := strings.Split(linea, ",")
+
+		if linea_array[0] == "0"{
+			continue
+		}
+
+		if linea_array[1] == "U"{
+			// fmt.Println("Grupo: " + linea_array[2])
+			if(linea_array[2] == username){
+				linea_array[0] = "0"
+				eliminado = true
+			}
+		}
+
+		linea = strings.Join(linea_array[:], ",")
+
+		nuevas_lineas = append(nuevas_lineas, linea)
+	} 
+
+	if(!eliminado){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ El usuario no existe o ya ha sido eliminado")
+		disco.Close()
+		return
+	}
+
+	nuevo_txt := strings.Join(nuevas_lineas[:], "\n")
+
+	content_arr := []byte(nuevo_txt)
+	chunks := chunkSlice(content_arr)
+	
+	pos := 0
+
+	b_inicio := bytes_to_int(super_block.S_first_blo[:])
+
+	var empty [16]byte
+
+	for i := 0; i < len(chunks); i += 1 {
+
+		if(i == 16){
+			break
+		}
+
+		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		
+		if(bloque_pos != -1){
+			pos = block_start + bloque_pos*block_size
+		} else {
+			pos = block_start + b_inicio*block_size
+			inodo_users.I_block[i] = empty
+			copy(inodo_users.I_block[i][:], strconv.Itoa(b_inicio))
+			b_inicio = b_inicio + 1
+		}
+
+		block := Archivo{}
+		copy(block.B_content[:], chunks[i])
+		block_bytes := cmd.struct_to_bytes(block)
+		disco.WriteAt(block_bytes, int64(pos))		
+	}
+
+
+	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
+	super_bytes := cmd.struct_to_bytes(super_block)
+	disco.WriteAt(super_bytes, int64(part_start))
+
+	root_bytes := cmd.struct_to_bytes(inodo_users)
+	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
+
+	disco.Close()
 }
 
 
 
-func (cmd *Comandos)createFile(disco *os.File, content string, b_libre int) []int {
+func (cmd *Comandos)WriteFile(disco *os.File, content string, b_libre int) []int {
 	content_arr := []byte(content)
 	chunks := chunkSlice(content_arr)
 	fmt.Println(chunks)
@@ -702,6 +1315,7 @@ func (cmd *Comandos)createFile(disco *os.File, content string, b_libre int) []in
 	return used_blocks
 }
 
+
 func chunkSlice(slice []byte) [][]byte {
 	var chunks [][]byte
 	for i := 0; i < len(slice); i += 64 {
@@ -713,6 +1327,7 @@ func chunkSlice(slice []byte) [][]byte {
 
 		chunks = append(chunks, slice[i:end])
 	}
+	fmt.Println("--------------------" + strconv.Itoa(len(chunks)))
 	return chunks
 }
  

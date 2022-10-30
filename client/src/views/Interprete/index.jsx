@@ -26,7 +26,7 @@ export const Interprete = () => {
   };
 
   const logout = () => {
-
+    localStorage.setItem("user", "")
     // if (window.confirm("¿Desea cerrar sesión?")) {
     //   localStorage.setItem("user", "")
     //   setState(state+1)
@@ -39,11 +39,38 @@ export const Interprete = () => {
     })
     .then((willLogout) => {
       if (willLogout) {
-        swal("Se ha cerrrado la sesion", {
-          icon: "success",
-        });
-        localStorage.setItem("user", "")
-        setState(state+1)
+
+        fetch('http://127.0.0.1:5000/logout', {
+          method: 'POST',
+          body: JSON.stringify({"mensaje":""}),
+          headers: {
+              'Content-Type':'application/json'
+          }
+          })
+          .then(resp => resp.json())
+          .then(data => {
+              
+              if(data.mensaje != ""){
+                    swal(data.mensaje, {
+                      icon: "error",
+                    });
+
+              } else {
+
+                swal("Se ha cerrrado la sesion", {
+                  icon: "success",
+                });
+                localStorage.setItem("user", "")
+                setState(state+1)
+              }
+
+              
+
+          })
+          .catch(console.error); 
+
+
+        
       } 
     });
     

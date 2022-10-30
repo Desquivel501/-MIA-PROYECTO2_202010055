@@ -1,20 +1,55 @@
 import { Button } from 'react-bootstrap';
 import { Link } from "react-router-dom";
+import swal from 'sweetalert';
 
 export const Login = () => {
 
     const ingresar = () => {
         
-        
-
         var user_text = document.getElementById("username").value; 
 
         if (user_text != ""){
             var pass_text = document.getElementById("password").value; 
             var id_text = document.getElementById("id_particion").value; 
-            localStorage.setItem("user", user_text)
+            // localStorage.setItem("user", user_text)
+
+            const data_request = {
+                "name": user_text,
+                "password": pass_text,
+                "part": id_text
+            }
+
+            fetch('http://127.0.0.1:5000/login', {
+                method: 'POST',
+                body: JSON.stringify(data_request),
+                headers: {
+                    'Content-Type':'application/json'
+                }
+                })
+                .then(resp => resp.json())
+                .then(data => {
+                    
+                    if(data.error != ""){
+                          swal(data.error, {
+                            icon: "error",
+                          });
+
+                    } else {
+
+                        swal("Login correcto", {
+                            icon: "success",
+                          });
+
+                        // alert(data.name)
+                        localStorage.setItem("user", data.name)
+                    }
+
+                    
+
+                })
+                .catch(console.error); 
         }
-      }
+    }
 
     return (
  

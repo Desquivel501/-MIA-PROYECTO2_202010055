@@ -20,6 +20,25 @@ type Response2 struct{
     Instrucciones string `json:"instrucciones"`
 }
 
+
+type LoginRequest struct{
+    Usuario string `json:"name"`
+	Contrasenia string `json:"password"`
+	Particion string `json:"part"`
+}
+
+type LoginResponse struct{
+    Usuario string `json:"name"`
+	Error string `json:"error"`
+}
+
+
+type LogoutRequest struct{
+	Mensaje string `json:"mensaje"`
+}
+
+
+
 type analizador struct {  
     codigo   string
 	cmd comandos.Comandos
@@ -40,6 +59,9 @@ func (a analizador) Imprimir() {
 func Split_txt(texto string) []string{
 	name := ""
 	path := ""
+	grp := ""
+	pwd := ""
+	usuario := ""
 	var splited []string
 	first := 0
 	last := 0
@@ -58,9 +80,33 @@ func Split_txt(texto string) []string{
 		texto = strings.Replace(texto, name, "", 1)
 	}
 
+	first = strings.Index(texto, "-grp=\"")
+	if (first > -1){
+		last = strings.Index(texto[first+6:], "\"") + first + 6
+		grp = texto[first:last+1]
+		texto = strings.Replace(texto, grp, "", 1)
+	}
+
+	first = strings.Index(texto, "-pwd=\"")
+	if (first > -1){
+		last = strings.Index(texto[first+6:], "\"") + first + 6
+		pwd = texto[first:last+1]
+		texto = strings.Replace(texto, pwd, "", 1)
+	}
+
+	first = strings.Index(texto, "-usuario=\"")
+	if (first > -1){
+		last = strings.Index(texto[first+10:], "\"") + first + 10
+		usuario = texto[first:last+1]
+		texto = strings.Replace(texto, usuario, "", 1)
+	}
+
 	splited = strings.Split(texto, " ")
 	if (path != ""){splited = append(splited, path)}
 	if (name != ""){splited = append(splited, name)}
+	if (grp != ""){splited = append(splited, grp)}
+	if (pwd != ""){splited = append(splited, pwd)}
+	if (usuario != ""){splited = append(splited, usuario)}
 
 	return splited
 }
@@ -303,6 +349,42 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		a.cmd.GetUsers(id)
 	}
 
+
+	if comando == "rmusr"{
+		fmt.Println("")
+		fmt.Println("rmusr")
+		usuario := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-usuario=") == 0) {
+				param = strings.Replace(param, "-usuario=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				usuario = param
+				fmt.Println("Usuario: ",usuario)
+			}
+		}
+
+		a.cmd.Rmusr(usuario)
+	}
+
+	if comando == "rmgrp"{
+		name := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-name=") == 0) {
+				param = strings.Replace(param, "-name=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				name = param
+				fmt.Println("Name: ",name)
+			}
+		}
+
+		a.cmd.Rmgrp(name)
+	}
+
+
 	if comando == "mkfs"{
 		fmt.Println("Comando rmdisk")
 		id := ""
@@ -322,6 +404,54 @@ func (a *analizador) Identificar(comando string, parametros []string){
 			return
 		}
 		a.cmd.Mkfs(id)
+	}
+
+	if comando == "login"{
+		id := ""
+		usuario := ""
+		password := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-id=") == 0) {
+				param = strings.Replace(param, "-id=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				id = param
+				fmt.Println("ID: ",id)
+			}
+			if (strings.Index(param, "-usuario=") == 0) {
+				param = strings.Replace(param, "-usuario=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				usuario = param
+				fmt.Println("Usuario: ",id)
+			}
+			if (strings.Index(param, "-password=") == 0) {
+				param = strings.Replace(param, "-password=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				password = param
+				fmt.Println("Password: ",id)
+			}
+		}
+
+		if usuario == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de usuario")
+			return
+		}
+
+		if password == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado la contraseña")
+			return
+		}
+
+		if id == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el ID de la particion")
+			return
+		}
+		
+		a.LoginFunction(usuario, id, password)
+
+
+		// a.cmd.GetUsers(id)
 	}
 
 	// if comando == "pause"{
@@ -379,6 +509,85 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		a.AnalizarScript(path)
 	}
 
+
+	if comando == "mkusr"{
+		grupo := ""
+		usuario := ""
+		password := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-grp=") == 0) {
+				param = strings.Replace(param, "-grp=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				grupo = param
+				fmt.Println("Grupo: ",grupo)
+			}
+			if (strings.Index(param, "-usuario=") == 0) {
+				param = strings.Replace(param, "-usuario=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				usuario = param
+				fmt.Println("Usuario: ",usuario)
+			}
+			if (strings.Index(param, "-pwd=") == 0) {
+				param = strings.Replace(param, "-pwd=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				password = param
+				fmt.Println("Password: ",password)
+			}
+		}
+
+		if usuario == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el nombre de usuario")
+			return
+		}
+
+		if password == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado la contraseña")
+			return
+		}
+
+		if grupo == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el grupo")
+			return
+		}
+		
+		a.cmd.Mkusr(usuario, password, grupo)
+
+
+		// a.cmd.GetUsers(id)
+	}
+
+
+	if comando == "mkgrp"{
+		name := ""
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-name=") == 0) {
+				param = strings.Replace(param, "-name=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				name = param
+				fmt.Println("Name: ",name)
+			}
+		}
+
+		if name == ""{
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado el nombre del grupo")
+			return
+		}
+		
+		a.cmd.Mkgrp(name)
+
+
+		// a.cmd.GetUsers(id)
+	}
+
+}
+
+func (a *analizador) LoginFunction(name string, id string, password string) string{
+	a.cmd.Login(name, password, id)
+	return ""
 }
 
 
@@ -416,16 +625,48 @@ func (a *analizador) PostConsola(c *gin.Context){
 		a.Analizar(com)
 	}
 
-	// graph := `graph {
-	// 	grandparent -- "parent A";
-	// 	child;
-	// 	"parent B" -- child;
-	// 	grandparent --  "parent B";
-	//   }`
-
 	fmt.Println(a.cmd.Graph)
 
 	res := Response1 {a.cmd.GetConsola(), a.cmd.Graph}
 	c.IndentedJSON(http.StatusCreated, res)
 }
 
+func (a *analizador) PostLogin(c *gin.Context){
+
+	var texto LoginRequest
+	if err := c.BindJSON(&texto); err != nil {
+        return
+    }
+	
+	res_error := a.cmd.Login(texto.Usuario, texto.Contrasenia, texto.Particion)
+
+	fmt.Println(res_error )
+
+	// fmt.Println(texto.Usuario)
+	// fmt.Println(texto.Contrasenia)
+	// fmt.Println(texto.Particion)
+
+	res := LoginResponse {texto.Usuario, res_error}
+	c.IndentedJSON(http.StatusCreated, res)
+}
+
+
+
+func (a *analizador) PostLogout(c *gin.Context){
+
+	var texto LogoutRequest
+	if err := c.BindJSON(&texto); err != nil {
+        return
+    }
+	
+	res_error := a.cmd.Logout()
+
+	fmt.Println(res_error )
+
+	// fmt.Println(texto.Usuario)
+	// fmt.Println(texto.Contrasenia)
+	// fmt.Println(texto.Particion)
+
+	res := LogoutRequest {res_error}
+	c.IndentedJSON(http.StatusCreated, res)
+}
