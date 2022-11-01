@@ -217,6 +217,7 @@ func (a *analizador) Identificar(comando string, parametros []string){
 				fmt.Println("Path: ",path)
 			}
 		}
+		a.cmd.Rmdisk(path)
 	}
 
 	if comando == "fdisk"{
