@@ -48,6 +48,7 @@ type Mounted struct {
 	Master MBR
 	Path string
 	Id_disco int
+	Creado_home bool
 }
 
 type SuperBlock struct {
@@ -103,6 +104,7 @@ type Comandos struct {
 	Usuario string
 	Root bool
 	Part_id string
+	Creado_home bool
 }
 
 
@@ -119,14 +121,29 @@ func (cmd *Comandos) Mkdisk(size int, fit byte, unit byte, path string){
 		bloque[j] = 0
 	}
 
+	path_dir := slicePath(path)
+	path_dir = path_dir[:len(path_dir)-1]
+	path_dir_str := strings.Join(path_dir, "/")
+
+	// fmt.Println(path_dir_str)
+	err := os.MkdirAll(path_dir_str, os.ModePerm)
+	if err != nil {
+		// log.Println(err)
+		fmt.Println("here")
+		cmd.msg_error(err)
+		return
+	}
+
 	disco, err := os.Create(path)
 	if err != nil {
 		cmd.msg_error(err)
+		return
 	}
 
 	for limite < size {
 		_, err := disco.Write(bloque)
 		if err != nil {
+			fmt.Println("---------------------------------------------")
 			cmd.msg_error(err)
 		}
 		limite++
@@ -153,7 +170,9 @@ func (cmd *Comandos) Mkdisk(size int, fit byte, unit byte, path string){
 	mbr_bytes := cmd.struct_to_bytes(mbr)
 	pos, err := disco.Seek(0, os.SEEK_SET)
 	if err != nil {
+		
 		cmd.msg_error(err)
+		return
 	}
 
 	_, err = disco.WriteAt(mbr_bytes, pos)
@@ -456,14 +475,14 @@ func (cmd *Comandos) ShowMount(){
 	}
 }
 
-func (cmd *Comandos) GetMount(id string) (Mounted, int){
+func (cmd *Comandos) GetMount(id string) (*Mounted, int){
 	empty := Mounted {}
 	for _, m := range cmd.Mounted_list{
 		if(m.Id == id){
-			return m, 1
+			return &m, 1
 		}
 	}
-	return empty, 0
+	return &empty, 0
 }
 
 func (cmd *Comandos) Mkfs(id string){
@@ -494,9 +513,10 @@ func (cmd *Comandos) Mkfs(id string){
 	copy(super.S_filesystem_type[:], "2")
 	copy(super.S_inodes_count[:], strconv.Itoa(n))
 	copy(super.S_blocks_count[:], strconv.Itoa(n*3))
-	copy(super.S_free_blocks_count[:], strconv.Itoa(n - 2))
-	copy(super.S_free_inodes_count[:], strconv.Itoa(n*3 - 2))
+	copy(super.S_free_blocks_count[:], strconv.Itoa(n*3 - 2))
+	copy(super.S_free_inodes_count[:], strconv.Itoa(n - 2))
 	copy(super.S_mtime[:], date)
+	copy(super.S_magic[:], "0xEF53")
 	copy(super.S_mnt_count[:], strconv.Itoa(1))
 	copy(super.S_inode_size[:], strconv.Itoa(SI))
 	copy(super.S_block_size[:], strconv.Itoa(SB))
@@ -644,7 +664,7 @@ func (cmd *Comandos) GetUsers(id string) (string, string) {
 
 	contenido_str := ""
 	for i := 0; i < 16; i += 1{
-		
+		fmt.Println("--------------")
 		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
 
 		if(bloque_pos == -1){
@@ -848,6 +868,7 @@ func (cmd *Comandos) Mkusr(username string, password string, grupo string){
 	chunks := chunkSlice(content_arr)
 	
 	pos := 0
+	usados := 0
 
 	b_inicio := bytes_to_int(super_block.S_first_blo[:])
 
@@ -869,7 +890,8 @@ func (cmd *Comandos) Mkusr(username string, password string, grupo string){
 			inodo_users.I_block[i] = empty
 
 			copy(inodo_users.I_block[i][:], strconv.Itoa(b_inicio))
-			b_inicio = b_inicio + 1
+			b_inicio +=  1
+			usados += 1
 		}
 
 		block := Archivo{}
@@ -878,8 +900,16 @@ func (cmd *Comandos) Mkusr(username string, password string, grupo string){
 		disco.WriteAt(block_bytes, int64(pos))		
 	}
 
+	blo_usados := bytes_to_int(super_block.S_blocks_count[:])
+	blo_libres := bytes_to_int(super_block.S_free_blocks_count[:])
 
+	blo_libres = blo_libres - usados
+	blo_usados = blo_usados + usados
+
+	copy(super_block.S_blocks_count[:], strconv.Itoa(blo_usados))
+	copy(super_block.S_free_blocks_count[:], strconv.Itoa(blo_libres))
 	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
+
 	super_bytes := cmd.struct_to_bytes(super_block)
 	disco.WriteAt(super_bytes, int64(part_start))
 
@@ -990,7 +1020,7 @@ func (cmd *Comandos) Mkgrp(group_name string){
 	chunks := chunkSlice(content_arr)
 	
 	pos := 0
-
+	usados := 0
 	b_inicio := bytes_to_int(super_block.S_first_blo[:])
 
 	var empty [16]byte
@@ -1010,6 +1040,7 @@ func (cmd *Comandos) Mkgrp(group_name string){
 			inodo_users.I_block[i] = empty
 			copy(inodo_users.I_block[i][:], strconv.Itoa(b_inicio))
 			b_inicio = b_inicio + 1
+			usados += 1
 		}
 
 		block := Archivo{}
@@ -1018,6 +1049,15 @@ func (cmd *Comandos) Mkgrp(group_name string){
 		disco.WriteAt(block_bytes, int64(pos))		
 	}
 
+
+	blo_usados := bytes_to_int(super_block.S_blocks_count[:])
+	blo_libres := bytes_to_int(super_block.S_free_blocks_count[:])
+
+	blo_libres = blo_libres - usados
+	blo_usados = blo_usados + usados
+
+	copy(super_block.S_blocks_count[:], strconv.Itoa(blo_usados))
+	copy(super_block.S_free_blocks_count[:], strconv.Itoa(blo_libres))
 
 	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
 	super_bytes := cmd.struct_to_bytes(super_block)
@@ -1159,7 +1199,6 @@ func (cmd *Comandos) Rmgrp(group_name string){
 		disco.WriteAt(block_bytes, int64(pos))		
 	}
 
-
 	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
 	super_bytes := cmd.struct_to_bytes(super_block)
 	disco.WriteAt(super_bytes, int64(part_start))
@@ -1284,7 +1323,6 @@ func (cmd *Comandos) Rmusr(username string){
 		disco.WriteAt(block_bytes, int64(pos))		
 	}
 
-
 	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
 	super_bytes := cmd.struct_to_bytes(super_block)
 	disco.WriteAt(super_bytes, int64(part_start))
@@ -1293,6 +1331,463 @@ func (cmd *Comandos) Rmusr(username string){
 	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
 
 	disco.Close()
+}
+
+
+func (cmd *Comandos) Mkfile(file_size int, path_file string){
+
+	id := cmd.Part_id
+
+	no_inodos := 0
+	no_bloques := 0
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// fmt.Println("here")
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	currentTime := time.Now()
+	date := currentTime.Format("02-01-2006")
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_start := bytes_to_int(super_block.S_inode_start[:])
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	// inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	b_inicio := bytes_to_int(super_block.S_first_blo[:])
+	i_inicio := bytes_to_int(super_block.S_first_ino[:])
+
+	carpeta_root := cmd.leerCarpeta(disco, int64(block_start))
+
+	// root_pos := i_inicio
+	home := Inodo{}
+
+	home_pos := 0
+
+	if(cmd.Creado_home == false){
+		// bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
+		// home := Inodo{}
+		copy(home.I_uid[:], "1")
+		copy(home.I_gid[:], "1")
+		copy(home.I_size[:], strconv.Itoa(0))
+		copy(home.I_atime[:], date)
+		copy(home.I_ctime[:], date)
+		copy(home.I_type[:], "0")
+		copy(home.I_perm[:], "664")
+		
+		for i := 0; i < 16; i += 1{
+			copy(home.I_block[i][:], strconv.Itoa(-1))
+		}
+
+		home_cont := Content{}
+		copy(home_cont.B_name[:], "home")
+		copy(home_cont.B_inodo[:], strconv.Itoa(i_inicio))
+
+		carpeta_root.B_content[1] = home_cont
+
+		home_bytes := cmd.struct_to_bytes(home)
+		// disco.WriteAt(home_bytes, int64(inodo_start + inodo_size*i_inicio))
+
+		_, err = disco.WriteAt(home_bytes, int64(inodo_start + inodo_size*i_inicio))
+			if err != nil {
+			cmd.msg_error(err)
+			// fmt.Println(err)
+		}
+
+		home_pos = inodo_start + inodo_size*i_inicio
+
+		i_inicio += 1
+		
+		carpeta_bytes := cmd.struct_to_bytes(carpeta_root)
+		// disco.WriteAt(carpeta_bytes, int64(block_start))
+
+		_, err = disco.WriteAt(carpeta_bytes, int64(block_start))
+			if err != nil {
+			cmd.msg_error(err)
+			// fmt.Println(err)
+		}
+
+		no_inodos += 1
+		cmd.Creado_home = true
+
+	} else {
+
+		contenido := carpeta_root.B_content[1]
+		num_inodo_home := bytes_to_int(contenido.B_inodo[:])
+		home = cmd.leerInodo(disco, int64(inodo_start + num_inodo_home*inodo_size))
+
+		home_pos = inodo_start + num_inodo_home*inodo_size
+	}
+	
+	new_file := Inodo{}
+	copy(new_file.I_uid[:], "1")
+	copy(new_file.I_gid[:], "1")
+	copy(new_file.I_size[:], strconv.Itoa(file_size))
+	copy(new_file.I_atime[:], date)
+	copy(new_file.I_ctime[:], date)
+	copy(new_file.I_type[:], "1")
+	copy(new_file.I_perm[:], "664")
+	no_inodos += 1
+
+	text := createContent(file_size)
+
+	content_arr := []byte(text)
+	chunks := chunkSlice(content_arr)
+
+	for i := 0; i < 16; i += 1{
+		copy(new_file.I_block[i][:], strconv.Itoa(-1))
+	}
+
+	var empty [16]byte
+	for i := 0; i < len(chunks); i += 1 {
+
+		if(i == 16){
+			break
+		}
+
+		pos := block_start + b_inicio*block_size
+		new_file.I_block[i] = empty
+		copy(new_file.I_block[i][:], strconv.Itoa(b_inicio))
+		b_inicio = b_inicio + 1
+		no_bloques += 1
+
+		block := Archivo{}
+		copy(block.B_content[:], chunks[i])
+		block_bytes := cmd.struct_to_bytes(block)
+		// disco.WriteAt(block_bytes, int64(pos))
+		
+		_, err = disco.WriteAt(block_bytes, int64(pos))
+			if err != nil {
+			cmd.msg_error(err)
+			// fmt.Println(err)
+		}
+		
+	}
+
+	new_bytes := cmd.struct_to_bytes(new_file)
+	disco.WriteAt(new_bytes, int64(inodo_start + inodo_size*i_inicio))
+	
+
+	path_name_arr := slicePath(path_file)
+	// path_name_arr = path_dir[len(path_name_arr)-1:]
+	path_name := path_name_arr[len(path_name_arr)-1]
+
+	done := false
+
+	fmt.Println(home_pos)
+
+	for i := 0; i < 16; i += 1{
+		
+		bloque_pos := bytes_to_int(home.I_block[i][:])
+
+		fmt.Println(bloque_pos)
+
+		if(bloque_pos != -1){
+			bloque := cmd.leerCarpeta(disco, int64(block_start + bloque_pos*block_size))
+
+			for j := 0; j < 4; j+= 1{
+				contenido := bloque.B_content[j]
+				nuevo_inodo_pos := bytes_to_int(contenido.B_inodo[:])
+
+				if(nuevo_inodo_pos == -1){
+					new_cont := Content{}
+					copy(new_cont.B_name[:], path_name)
+					copy(new_cont.B_inodo[:], strconv.Itoa(i_inicio))
+					i_inicio += 1
+					bloque.B_content[j] = new_cont
+					done = true
+
+					bloque_bytes := cmd.struct_to_bytes(bloque)
+					disco.WriteAt(bloque_bytes, int64(block_start + bloque_pos*block_size))
+
+					break
+				}
+			}
+		} else {
+			empty_cont := Content{}
+			copy(empty_cont.B_name[:], "")
+			copy(empty_cont.B_inodo[:], strconv.Itoa(-1))
+
+			new_cont := Content{}
+			copy(new_cont.B_name[:], path_name)
+			copy(new_cont.B_inodo[:], strconv.Itoa(i_inicio))
+			i_inicio += 1
+
+			new_dir := Carpeta{}
+			var cont_arr [4]Content
+			cont_arr[0] = new_cont
+			cont_arr[1] = empty_cont
+			cont_arr[2] = empty_cont
+			cont_arr[3] = empty_cont
+			new_dir.B_content = cont_arr
+
+			fmt.Println(b_inicio)
+
+			carpeta_bytes := cmd.struct_to_bytes(new_dir)
+			disco.WriteAt(carpeta_bytes, int64(block_start + b_inicio*block_size))
+
+			home.I_block[i] = empty
+			copy(home.I_block[i][:], strconv.Itoa(b_inicio))
+
+			b_inicio += 1
+			no_bloques += 1
+
+			break
+		}	
+
+		if(done){
+			break
+		}
+
+	}
+
+
+
+	home_bytes := cmd.struct_to_bytes(home)
+	disco.WriteAt(home_bytes, int64(home_pos))
+
+
+	blo_usados := bytes_to_int(super_block.S_blocks_count[:])
+	blo_libres := bytes_to_int(super_block.S_free_blocks_count[:])
+
+	blo_libres = blo_libres - no_bloques
+	blo_usados = blo_usados + no_bloques
+
+	copy(super_block.S_blocks_count[:], strconv.Itoa(blo_usados))
+	copy(super_block.S_free_blocks_count[:], strconv.Itoa(blo_libres))
+
+
+
+	ino_usados := bytes_to_int(super_block.S_inodes_count[:])
+	ino_libres := bytes_to_int(super_block.S_free_inodes_count[:])
+
+	ino_libres = ino_libres - no_inodos
+	ino_usados = ino_usados + no_inodos
+
+	copy(super_block.S_inodes_count[:], strconv.Itoa(ino_usados))
+	copy(super_block.S_free_inodes_count[:], strconv.Itoa(ino_libres))
+
+	copy(super_block.S_first_ino[:], strconv.Itoa(i_inicio))
+	copy(super_block.S_first_blo[:], strconv.Itoa(b_inicio))
+	super_bytes := cmd.struct_to_bytes(super_block)
+	disco.WriteAt(super_bytes, int64(part_start))
+
+	disco.Close()
+}
+
+
+func (cmd *Comandos)ShowFile(file_name string, id string){
+
+	dot := ""
+	dot += "digraph G {\n"
+
+	dot += "node [fontname=\"Helvetica,Arial,sans-serif\"]\n"
+	dot += "node [shape=box]\n"
+
+
+	if(file_name == "/users.txt"){
+		texto, _ := cmd.GetUsers(id)
+		
+		dot += "a[label=\" " + texto + "  \"]\n"
+		dot += "}"
+
+		cmd.Graph = dot
+		return
+	}
+
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// fmt.Println("here")
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_start := bytes_to_int(super_block.S_inode_start[:])
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	// inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	// b_inicio := bytes_to_int(super_block.S_first_blo[:])
+	// i_inicio := bytes_to_int(super_block.S_first_ino[:])
+
+	carpeta_root := cmd.leerCarpeta(disco, int64(block_start))
+
+	contenido := carpeta_root.B_content[1]
+	num_inodo_home := bytes_to_int(contenido.B_inodo[:])
+
+	home := cmd.leerInodo(disco, int64(inodo_start + num_inodo_home*inodo_size))
+
+
+	for i := 0; i < 16; i += 1{
+		
+		bloque_pos := bytes_to_int(home.I_block[i][:])
+
+		if(bloque_pos != -1){
+			bloque := cmd.leerCarpeta(disco, int64(block_start + bloque_pos*block_size))
+
+			for j := 0; j < 4; j+= 1{
+
+				contenido := bloque.B_content[j]
+
+				if(strings.Contains(string(contenido.B_name[:]), file_name)){
+
+					file_inodo_pos := bytes_to_int(contenido.B_inodo[:])
+
+					file := cmd.leerInodo(disco, int64(inodo_start + file_inodo_pos*inodo_size))
+					
+					contenido_str := ""
+
+					for i := 0; i < 16; i += 1{
+						bloque_pos := bytes_to_int(file.I_block[i][:])
+
+						if(bloque_pos == -1){
+							continue
+						}
+
+						bloque := cmd.leerArchivo(disco, int64(block_start + bloque_pos*block_size))
+
+						// fmt.Println(strconv.Itoa(bloque_pos) + "------" + strconv.Itoa(block_size) + " --- " +strconv.Itoa(block_start + bloque_pos*block_size))
+
+						content := bytes.Trim(bloque.B_content[:], "\x00")
+						
+						contenido_str += string(content[:])
+					}
+
+					// cmd.AddConsola(contenido_str)
+
+					dot += "a[label=\" " + contenido_str + "  \"]\n"
+					dot += "}"
+
+					cmd.Graph = dot
+					return			
+
+				}
+			}
+		} 
+	}
+	cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha encontrado el archivo")
+	dot += "a[label=\"\"]\n"
+	dot += "}"
+
+	cmd.Graph = dot
+
+}
+
+
+func (cmd *Comandos) ReporteSuper(id string){
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha podido abrir el disco")
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+
+	dot := ""
+
+	dot += "digraph G {\n"; 
+    dot += "fontname=\"Helvetica,Arial,sans-serif\"\n"; 
+	dot += "node [fontname=\"Helvetica,Arial,sans-serif\"]\n"; 
+    dot += "rankdir=TB;\n"; 
+    dot += "node [shape=record];\n"; 
+    dot += "a[label = <<table border=\"0\" cellborder=\"1\" cellspacing=\"0\" cellpadding=\"4\">\n"; 
+    dot += "            <tr> <td bgcolor=\"#800080\">  <font color=\"white\"> <b>REPORTE SUPER BLOQUE</b> </font> </td> <td bgcolor=\"#800080\"></td> </tr>\n";
+
+	dot += "            <tr> <td> <b>s_filesystem_type</b> </td> <td> <b>" + bytes_to_string(super_block.S_filesystem_type[:]) + "</b> </td> </tr>\n"; 
+	
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_inodes_count</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + strconv.Itoa(bytes_to_int(super_block.S_inodes_count[:])) + "</b> </td> </tr>\n"; 
+	dot += "            <tr> <td> <b>s_blocks_count</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_blocks_count[:])) + "</b> </td> </tr>\n"; 
+	
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_free_inodes_count</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + strconv.Itoa(bytes_to_int(super_block.S_free_inodes_count[:])) + "</b> </td> </tr>\n"; 
+	dot += "            <tr> <td> <b>s_free_blocks_count</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_free_blocks_count[:])) + "</b> </td> </tr>\n"; 
+
+
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_mtime</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + bytes_to_string(super_block.S_mtime[:]) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td> <b>s_mnt_count</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_mnt_count[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_magic</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + bytes_to_string(super_block.S_magic[:]) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td> <b>s_inode_size</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_inode_size[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_block_size</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + strconv.Itoa(bytes_to_int(super_block.S_block_size[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td> <b>s_firts_ino</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_first_ino[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_first_blo</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + strconv.Itoa(bytes_to_int(super_block.S_first_blo[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td> <b>s_bm_inode_start</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_bm_inode_start[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_bm_block_start</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + strconv.Itoa(bytes_to_int(super_block.S_bm_block_start[:])) + "</b> </td> </tr>\n"; 
+
+
+	dot += "            <tr> <td> <b>s_inode_start</b> </td> <td> <b>" + strconv.Itoa(bytes_to_int(super_block.S_inode_start[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "            <tr> <td bgcolor=\"#f2e5f2\"> <b>s_block_start</b> </td> <td bgcolor=\"#f2e5f2\"> <b>" + strconv.Itoa(bytes_to_int(super_block.S_block_start[:])) + "</b> </td> </tr>\n"; 
+
+	dot += "        </table>>\n"; 
+    dot += "]\n"; 
+    dot += "}\n"; 
+
+	cmd.Graph = dot
+
+	// dot += "            <tr> <td> <b>s_filesystem_type</b> </td> <td> <b>" + bytes_to_string(super_block.S_filesystem_type[:]) + "</b> </td> </tr>\n"; 
+	// dot += "            <tr> <td> <b>s_filesystem_type</b> </td> <td> <b>" + bytes_to_string(super_block.S_filesystem_type[:]) + "</b> </td> </tr>\n"; 
+	// dot += "            <tr> <td> <b>s_filesystem_type</b> </td> <td> <b>" + bytes_to_string(super_block.S_filesystem_type[:]) + "</b> </td> </tr>\n"; 
+	// dot += "            <tr> <td> <b>s_filesystem_type</b> </td> <td> <b>" + bytes_to_string(super_block.S_filesystem_type[:]) + "</b> </td> </tr>\n"; 
+
+	
+}
+
+
+func createContent(size int) string{
+	cadena := [10]string{"0","1","2","3","4","5","6","7","8","9"}
+	resultado := ""
+
+	j := 0
+	for i := 0; i < size; i+=1 {
+		resultado = resultado + cadena[j]
+
+		if(j == 9){
+			j = 0
+		}else{
+			j += 1
+		}
+	}
+	return resultado
 }
 
 
@@ -1327,7 +1822,6 @@ func chunkSlice(slice []byte) [][]byte {
 
 		chunks = append(chunks, slice[i:end])
 	}
-	fmt.Println("--------------------" + strconv.Itoa(len(chunks)))
 	return chunks
 }
  
@@ -1802,6 +2296,11 @@ func bytes_to_int(s []byte) int{
 	s = bytes.Trim(s, "\x00")
 	num, _ := strconv.Atoi(string(s[:]))
 	return num
+}
+
+func bytes_to_string(s []byte) string{
+	s = bytes.Trim(s, "\x00")
+	return string(s[:])
 }
 
 func (cmd *Comandos) AddConsola(texto string){

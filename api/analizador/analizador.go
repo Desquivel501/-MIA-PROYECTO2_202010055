@@ -62,6 +62,7 @@ func Split_txt(texto string) []string{
 	grp := ""
 	pwd := ""
 	usuario := ""
+	ruta := ""
 	var splited []string
 	first := 0
 	last := 0
@@ -71,6 +72,13 @@ func Split_txt(texto string) []string{
 		last = strings.Index(texto[first+7:], "\"") + first + 7
 		path = texto[first:last+1]
 		texto = strings.Replace(texto, path, "", 1)
+	}
+
+	first = strings.Index(texto, "-ruta=\"")
+	if (first > -1){
+		last = strings.Index(texto[first+7:], "\"") + first + 7
+		ruta = texto[first:last+1]
+		texto = strings.Replace(texto, ruta, "", 1)
 	}
 
 	first = strings.Index(texto, "-name=\"")
@@ -107,6 +115,7 @@ func Split_txt(texto string) []string{
 	if (grp != ""){splited = append(splited, grp)}
 	if (pwd != ""){splited = append(splited, pwd)}
 	if (usuario != ""){splited = append(splited, usuario)}
+	if (ruta != ""){splited = append(splited, ruta)}
 
 	return splited
 }
@@ -406,6 +415,62 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		a.cmd.Mkfs(id)
 	}
 
+	if comando == "mkfile"{
+		fmt.Println("Comando mkfile")
+		path := ""
+		size := -1
+		
+		for i := 0; i < len(parametros); i++ {
+			param := parametros[i]
+			if (strings.Index(param, "-path=") == 0) {
+				param = strings.Replace(param, "-path=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				path = param
+				fmt.Println("Path: ",path)
+			}
+
+			if (strings.Index(param, "-size=") == 0) {
+				param = strings.Replace(param, "-size=", "", 1)
+				if s, err := strconv.Atoi(param); err == nil {
+					size = s
+				}else{
+					fmt.Println(err)
+				}
+				fmt.Println("Size: ",size)
+			}
+		}
+
+		if(size < 0){
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ El tamaño de un archivo no puede ser negativo")
+			return
+		}
+
+		if(path == ""){
+			a.cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha ingresado ruta del archivo")
+			return
+		}
+
+		a.cmd.Mkfile(size, path)
+	}
+
+	// if comando == "file"{
+	// 	path := ""
+		
+	// 	for i := 0; i < len(parametros); i++ {
+	// 		param := parametros[i]
+	// 		if (strings.Index(param, "-path=") == 0) {
+	// 			param = strings.Replace(param, "-path=", "", 1)
+	// 			param = strings.Replace(param, "\"", "", 2)
+	// 			path = param
+	// 			fmt.Println("Path: ",path)
+	// 		}
+
+		
+	// 	}
+
+	// 	a.cmd.ShowFile(path)
+	// }
+
 	if comando == "login"{
 		id := ""
 		usuario := ""
@@ -461,6 +526,7 @@ func (a *analizador) Identificar(comando string, parametros []string){
 	if comando == "rep"{
 		name := ""
 		id := ""
+		ruta := ""
 		
 		for i := 0; i < len(parametros); i++ {
 			param := parametros[i]
@@ -478,10 +544,25 @@ func (a *analizador) Identificar(comando string, parametros []string){
 				fmt.Println("Id: ",id)
 			}
 
+			if (strings.Index(param, "-ruta=") == 0) {
+				param = strings.Replace(param, "-ruta=", "", 1)
+				param = strings.Replace(param, "\"", "", 2)
+				ruta = param
+				fmt.Println("Path: ",ruta)
+			}
+
 		}
 
-		if(name == "mbr"){
+		if(name == "disk"){
             a.cmd.RepDisco(id);
+        }
+
+		if(name == "sb"){
+            a.cmd.ReporteSuper(id);
+        }
+
+		if(name == "file"){
+            a.cmd.ShowFile(ruta, id);
         }
 	
 	}
@@ -507,6 +588,14 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		}
 
 		a.AnalizarScript(path)
+	}
+
+	if comando == "logout"{
+		response := a.cmd.Logout()
+		if(response == ""){
+			response = "[MIA]@Proyecto2:~$ Se ha cerrado la sesion"
+		}
+		a.cmd.AddConsola(response)
 	}
 
 
@@ -622,6 +711,17 @@ func (a *analizador) PostConsola(c *gin.Context){
 
 	split := strings.Split(texto.Instrucciones, "\n")
 	for _, com := range split {
+
+		if(len(com) == 0){
+			continue
+		}
+
+		first_char:= com[0:1]
+
+		if(first_char == "#"){
+			continue
+		}
+
 		a.Analizar(com)
 	}
 
