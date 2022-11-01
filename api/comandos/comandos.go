@@ -95,6 +95,13 @@ type Archivo struct{
 	B_content   [64]byte
 }
 
+type DiskData struct{
+	Block_start int
+	Block_size int
+	Inode_start int
+	Inode_size int
+}
+
 
 type Comandos struct {  
     Mounted_list []Mounted
@@ -143,7 +150,6 @@ func (cmd *Comandos) Mkdisk(size int, fit byte, unit byte, path string){
 	for limite < size {
 		_, err := disco.Write(bloque)
 		if err != nil {
-			fmt.Println("---------------------------------------------")
 			cmd.msg_error(err)
 		}
 		limite++
@@ -475,15 +481,24 @@ func (cmd *Comandos) ShowMount(){
 	}
 }
 
-func (cmd *Comandos) GetMount(id string) (*Mounted, int){
+func (cmd *Comandos) GetMount(id string) (Mounted, int){
 	empty := Mounted {}
 	for _, m := range cmd.Mounted_list{
 		if(m.Id == id){
-			return &m, 1
+			return m, 1
 		}
 	}
-	return &empty, 0
+	return empty, 0
 }
+
+func (cmd *Comandos) PushMount(id string, mount Mounted){
+	for i, m := range cmd.Mounted_list{
+		if(m.Id == id){
+			cmd.Mounted_list[i] = mount
+		}
+	}
+}
+
 
 func (cmd *Comandos) Mkfs(id string){
 	part, err_ := cmd.GetMount(id)
@@ -664,7 +679,6 @@ func (cmd *Comandos) GetUsers(id string) (string, string) {
 
 	contenido_str := ""
 	for i := 0; i < 16; i += 1{
-		fmt.Println("--------------")
 		bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
 
 		if(bloque_pos == -1){
@@ -752,6 +766,7 @@ func (cmd *Comandos) Mkusr(username string, password string, grupo string){
 
 	if( cmd.Root == false){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+		return
 	}
 
 	id := cmd.Part_id
@@ -759,6 +774,7 @@ func (cmd *Comandos) Mkusr(username string, password string, grupo string){
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
 	}
 
 	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
@@ -916,8 +932,8 @@ func (cmd *Comandos) Mkusr(username string, password string, grupo string){
 	root_bytes := cmd.struct_to_bytes(inodo_users)
 	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
 
+	cmd.AddConsola("[MIA]@Proyecto2:~$ Creado el usuario: " + username)
 
-	// cmd.WriteFile(disco )
 	disco.Close()
 }
 
@@ -926,6 +942,7 @@ func (cmd *Comandos) Mkgrp(group_name string){
 
 	if( cmd.Root == false){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+		return
 	}
 
 	id := cmd.Part_id
@@ -933,6 +950,7 @@ func (cmd *Comandos) Mkgrp(group_name string){
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
 	}
 
 	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
@@ -1068,6 +1086,8 @@ func (cmd *Comandos) Mkgrp(group_name string){
 
 
 	// cmd.WriteFile(disco )
+
+	cmd.AddConsola("[MIA]@Proyecto2:~$ Creado el grupo: " + group_name)
 	disco.Close()
 }
 
@@ -1076,6 +1096,7 @@ func (cmd *Comandos) Rmgrp(group_name string){
 
 	if( cmd.Root == false){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+		return
 	}
 
 	id := cmd.Part_id
@@ -1083,6 +1104,7 @@ func (cmd *Comandos) Rmgrp(group_name string){
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
 	}
 
 	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
@@ -1207,12 +1229,15 @@ func (cmd *Comandos) Rmgrp(group_name string){
 	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
 
 	disco.Close()
+
+	cmd.AddConsola("[MIA]@Proyecto2:~$ Eliminado el grupo: " + group_name)
 }
 
 func (cmd *Comandos) Rmusr(username string){
 
 	if( cmd.Root == false){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ Usuario no es root")
+		return
 	}
 
 	id := cmd.Part_id
@@ -1220,6 +1245,7 @@ func (cmd *Comandos) Rmusr(username string){
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
 	}
 
 	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
@@ -1267,6 +1293,8 @@ func (cmd *Comandos) Rmusr(username string){
 		linea_array := strings.Split(linea, ",")
 
 		if linea_array[0] == "0"{
+			linea = strings.Join(linea_array[:], ",")
+			nuevas_lineas = append(nuevas_lineas, linea)
 			continue
 		}
 
@@ -1331,6 +1359,8 @@ func (cmd *Comandos) Rmusr(username string){
 	disco.WriteAt(root_bytes, int64(inicio_root + num_inodo_users*inodo_size))
 
 	disco.Close()
+
+	cmd.AddConsola("[MIA]@Proyecto2:~$ Eliminado el usuario: " + username)
 }
 
 
@@ -1344,6 +1374,15 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
 		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+		return
+	}
+
+	path_name_arr := slicePath(path_file)
+
+	if(len(path_name_arr) > 3){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ No existe la ruta")
+		return
+		
 	}
 
 	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
@@ -1352,6 +1391,13 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 		// fmt.Println("here")
 		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
 	}
+
+
+	
+
+	path_name := path_name_arr[len(path_name_arr)-1]
+
+
 
 	currentTime := time.Now()
 	date := currentTime.Format("02-01-2006")
@@ -1377,7 +1423,7 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 
 	home_pos := 0
 
-	if(cmd.Creado_home == false){
+	if(part.Creado_home == false){
 		// bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
 		// home := Inodo{}
 		copy(home.I_uid[:], "1")
@@ -1421,7 +1467,9 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 		}
 
 		no_inodos += 1
-		cmd.Creado_home = true
+		part.Creado_home = true
+
+		cmd.PushMount(id, part)
 
 	} else {
 
@@ -1481,9 +1529,7 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 	disco.WriteAt(new_bytes, int64(inodo_start + inodo_size*i_inicio))
 	
 
-	path_name_arr := slicePath(path_file)
-	// path_name_arr = path_dir[len(path_name_arr)-1:]
-	path_name := path_name_arr[len(path_name_arr)-1]
+	
 
 	done := false
 
@@ -1586,6 +1632,8 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 	disco.WriteAt(super_bytes, int64(part_start))
 
 	disco.Close()
+
+	cmd.AddConsola("[MIA]@Proyecto2:~$ Creado el archivo: " + path_name)
 }
 
 
@@ -1699,6 +1747,172 @@ func (cmd *Comandos)ShowFile(file_name string, id string){
 }
 
 
+func (cmd *Comandos)ReporteTree(id string){
+
+	part, err_ := cmd.GetMount(id)
+	if(err_ == 0){
+		cmd.AddConsola("[MIA]@Proyecto2:~$ La particion no ha sido montada")
+	}
+
+	disco, err := os.OpenFile(part.Path, os.O_RDWR, 0660)
+	if err != nil {
+		cmd.msg_error(err)
+		// fmt.Println("here")
+		// return "ERROR", "[MIA]@Proyecto2:~$ No se ha podido abrir el disco"
+	}
+
+	part_start := bytes_to_int(part.Part.Part_start[:])
+
+	super_block := cmd.leerSuper(disco, int64(part_start))
+
+	inodo_start := bytes_to_int(super_block.S_inode_start[:])
+	inodo_size := bytes_to_int(super_block.S_inode_size[:])
+	block_size := bytes_to_int(super_block.S_block_size[:])
+	block_start := bytes_to_int(super_block.S_block_start[:])
+
+	inicio_root := bytes_to_int(super_block.S_inode_start[:])
+	
+	root := cmd.leerInodo(disco, int64(inicio_root))
+
+	data := DiskData{block_start, block_size, inodo_start, inodo_size}
+
+
+	
+	
+	dot := "digraph g {\n"
+	dot += "fontname=\"Helvetica,Arial,sans-serif\"\n"
+	dot +=	"node [fontname=\"Helvetica,Arial,sans-serif\"]\n"
+	dot +=	"node [shape = \"record\"]\n"
+	dot +=	"graph [\n"
+	dot +=	"rankdir = \"LR\"\n"
+	dot += "];\n"
+
+	dot = cmd.graficarInodo(dot, 0, root, data, disco)
+
+	dot += "}\n"
+
+	// cmd.AddConsola(dot)
+
+	cmd.Graph = dot
+
+}
+
+
+
+func (cmd *Comandos)graficarInodo(dot string, no_inodo int, inodo Inodo, disk DiskData, disco *os.File) string{
+
+	name := "inodo_" + strconv.Itoa(no_inodo)
+	dot_inodo := ""
+
+	dot_inodo += name + "[\n"
+	dot_inodo += "style=filled;"
+	dot_inodo += "color = \"#000000\"\n"
+	dot_inodo += "fillcolor = \"#cfe2f3\"\n"
+	dot_inodo += "label=\"inodo " + strconv.Itoa(no_inodo) + "|"
+	dot_inodo += "{UID|" + bytes_to_string(inodo.I_uid[:]) + "}|"
+	dot_inodo += "{GUID|" + bytes_to_string(inodo.I_gid[:]) + "}|"
+	dot_inodo += "{SIZE| " + strconv.Itoa(bytes_to_int(inodo.I_size[:])) +"}|"
+
+	dot_inodo += "{LECTURA|" + bytes_to_string(inodo.I_atime[:]) + "}|"
+	dot_inodo += "{CREACION|" + bytes_to_string(inodo.I_atime[:]) + "}|"
+	dot_inodo += "{MODIFICACION|" + bytes_to_string(inodo.I_atime[:]) + "}"
+
+	tipo := string(inodo.I_type[:])
+
+	
+
+
+	for i := 0; i < 16; i += 1{
+
+		bloque_pos := bytes_to_int(inodo.I_block[i][:])
+
+
+		if(bloque_pos == -1){
+			// dot_inodo += "|{AP" + strconv.Itoa(i) + " | -1 }"
+			continue
+		}
+
+		padre := name + ":f" + strconv.Itoa(i) 
+		dot_inodo += "|{AP" + strconv.Itoa(i) + " | <f" + strconv.Itoa(i) + "> " + strconv.Itoa(bloque_pos) + " }"
+
+		if(strings.Contains(string(tipo), "1")){
+
+			bloque := cmd.leerArchivo(disco, int64(disk.Block_start + bloque_pos*disk.Block_size))
+			content := bytes.Trim(bloque.B_content[:], "\x00")
+			dot = cmd.graficarBloqueArchivo(dot, padre, strconv.Itoa(bloque_pos),  bytes_to_string(content[:]))
+
+		} else {
+
+			bloque := cmd.leerCarpeta(disco, int64(disk.Block_start + bloque_pos*disk.Block_size))
+			dot = cmd.graficarBloqueCarpeta(dot, padre, strconv.Itoa(bloque_pos), bloque, disk, disco)
+		}
+		
+	} 
+	dot_inodo += "|{TIPO|" + tipo + "}|"
+	dot_inodo += "{PERMISOS|664}"
+
+	dot_inodo += "\"\n"
+	dot_inodo += "]\n"
+	dot += dot_inodo
+
+	return dot
+}
+
+func (cmd *Comandos)graficarBloqueArchivo(dot string, padre string, id string, contenido string) string {
+	name := "bloque_" + id
+	dot += name + "[\n"
+	dot += "style=filled;"
+	dot += "color = \"#000000\"\n"
+	dot += "fillcolor = \"#fff2cc\"\n"
+	dot += "label=\"bloque " + id + "|"
+	dot +=  contenido + "\"\n"
+	dot += "]\n"
+	dot += padre + "->" + name + "\n"
+	return dot
+}
+
+
+func (cmd *Comandos)graficarBloqueCarpeta(dot string, padre string, id string, carpeta Carpeta, disk DiskData, disco *os.File) string {
+	
+	name := "bloque_" + id
+	dot_bloque := name + "[\n"
+	dot_bloque += "style=filled;"
+	dot_bloque += "color = \"#000000\"\n"
+	dot_bloque += "fillcolor = \"#f4cccc\"\n"
+	dot_bloque += "label=\"bloque " + id
+	
+	
+	for i := 0; i < 4; i+= 1{
+		contenido := carpeta.B_content[i]
+		inodo_pos := bytes_to_int(contenido.B_inodo[:])
+
+		if(inodo_pos == -1){
+			dot_bloque += "|{   | -1 }"
+			continue
+		}
+
+		name_arr := bytes.Trim(contenido.B_name[:], "\x00")
+		name_cont := bytes_to_string(name_arr[:])
+		
+		dot_bloque += "|{ " + name_cont + "  | <f" + strconv.Itoa(i) + "> " + strconv.Itoa(inodo_pos) + " }"
+
+		inodo := cmd.leerInodo(disco, int64(disk.Inode_start + inodo_pos*disk.Inode_size))
+
+		dot = cmd.graficarInodo(dot, inodo_pos, inodo, disk, disco)
+		
+		dot += name + ":f" + strconv.Itoa(i) + "-> inodo_" + strconv.Itoa(inodo_pos) + "\n"
+
+	}
+
+	dot_bloque += "\"\n"
+	dot_bloque += "]\n"
+	dot += padre + "->" + name + "\n"
+	dot += dot_bloque
+
+	return dot
+}
+
+
 func (cmd *Comandos) ReporteSuper(id string){
 
 	part, err_ := cmd.GetMount(id)
@@ -1789,7 +2003,6 @@ func createContent(size int) string{
 	}
 	return resultado
 }
-
 
 
 func (cmd *Comandos)WriteFile(disco *os.File, content string, b_libre int) []int {

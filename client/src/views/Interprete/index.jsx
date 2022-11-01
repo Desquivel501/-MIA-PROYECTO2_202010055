@@ -88,6 +88,8 @@ export const Interprete = () => {
       .then(resp => resp.json())
       .then(data => {
 
+        console.log(data.reporte)
+
         setGraph(data.reporte)
         setConsoleText(data.resultado)
 

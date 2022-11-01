@@ -564,6 +564,10 @@ func (a *analizador) Identificar(comando string, parametros []string){
 		if(name == "file"){
             a.cmd.ShowFile(ruta, id);
         }
+
+		if(name == "tree"){
+            a.cmd.ReporteTree(id);
+        }
 	
 	}
 
