@@ -1670,6 +1670,9 @@ func (cmd *Comandos)ShowFile(file_name string, id string){
 		return
 	}
 
+	file_name_arr := slicePath(file_name)
+	file_name = file_name_arr[len(file_name_arr) - 1]
+
 
 	part, err_ := cmd.GetMount(id)
 	if(err_ == 0){
