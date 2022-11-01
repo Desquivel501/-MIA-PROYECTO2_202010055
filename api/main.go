@@ -20,7 +20,7 @@ func main() {
     router.POST("/consola", a.PostConsola)
     router.POST("/login", a.PostLogin)
     router.POST("/logout", a.PostLogout)
-    router.Run("127.0.0.1:5000")
+    router.Run(":5000")
 }
 
 
