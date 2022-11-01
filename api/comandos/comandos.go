@@ -192,10 +192,17 @@ func (cmd *Comandos) Mkdisk(size int, fit byte, unit byte, path string){
 }
 
 func (cmd *Comandos) Rmdisk(path string){
+
+	disk_name := slicePath(path)
+
 	e := os.Remove(path)
     if e != nil {
-        cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha podido eliminar el disco")
+        cmd.AddConsola("[MIA]@Proyecto2:~$ No se ha podido eliminar el disco: " + disk_name[len(disk_name) - 1])
+		return
     }
+
+	cmd.AddConsola("[MIA]@Proyecto2:~$ Se ha eliminado el disco: " + disk_name[len(disk_name) - 1])
+
 }
 
 func (cmd *Comandos) Fdisk(size int, fit byte, unit byte, path string, type_ byte, name string){
