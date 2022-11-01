@@ -1798,7 +1798,6 @@ func (cmd *Comandos)ReporteTree(id string){
 }
 
 
-
 func (cmd *Comandos)graficarInodo(dot string, no_inodo int, inodo Inodo, disk DiskData, disco *os.File) string{
 
 	name := "inodo_" + strconv.Itoa(no_inodo)

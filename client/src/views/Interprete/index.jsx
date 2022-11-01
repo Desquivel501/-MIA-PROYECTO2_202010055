@@ -78,11 +78,12 @@ export const Interprete = () => {
 
   const ejecutar = () => {
 
-    fetch('http://127.0.0.1:5000/consola', {
+    fetch('http://18.118.206.82:5000/consola', {
       method: 'POST',
       body: JSON.stringify({instrucciones:code}),
       headers: {
-        'Content-Type':'application/json'
+        'Content-Type':'application/json',
+        'Access-Control-Allow-Origin': '*'
       }
     })
       .then(resp => resp.json())
