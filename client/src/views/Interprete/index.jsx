@@ -40,7 +40,7 @@ export const Interprete = () => {
     .then((willLogout) => {
       if (willLogout) {
 
-        fetch('http://127.0.0.1:5000/logout', {
+        fetch('http://18.118.206.82:5000/logout', {
           method: 'POST',
           body: JSON.stringify({"mensaje":""}),
           headers: {
@@ -78,7 +78,7 @@ export const Interprete = () => {
 
   const ejecutar = () => {
 
-    fetch('http://127.0.0.1:5000/consola', {
+    fetch('http://18.118.206.82:5000/consola', {
       method: 'POST',
       body: JSON.stringify({instrucciones:code}),
       headers: {

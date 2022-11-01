@@ -19,7 +19,7 @@ export const Login = () => {
                 "part": id_text
             }
 
-            fetch('http://127.0.0.1:5000/login', {
+            fetch('http://18.118.206.82:5000/login', {
                 method: 'POST',
                 body: JSON.stringify(data_request),
                 headers: {
