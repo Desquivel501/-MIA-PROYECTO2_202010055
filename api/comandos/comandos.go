@@ -1437,7 +1437,10 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 
 	home_pos := 0
 
-	if(part.Creado_home == false){
+	contenido := carpeta_root.B_content[1]
+	num_inodo_home := bytes_to_int(contenido.B_inodo[:])
+
+	if(num_inodo_home == -1){
 		// bloque_pos := bytes_to_int(inodo_users.I_block[i][:])
 		// home := Inodo{}
 		copy(home.I_uid[:], "1")
@@ -1486,11 +1489,7 @@ func (cmd *Comandos) Mkfile(file_size int, path_file string){
 		cmd.PushMount(id, part)
 
 	} else {
-
-		contenido := carpeta_root.B_content[1]
-		num_inodo_home := bytes_to_int(contenido.B_inodo[:])
 		home = cmd.leerInodo(disco, int64(inodo_start + num_inodo_home*inodo_size))
-
 		home_pos = inodo_start + num_inodo_home*inodo_size
 	}
 	
